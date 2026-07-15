@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <PackageId>Talaan</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>BaryoDev</Authors>
+    <Description>A zero-dependency spreadsheet and CSV reader for .NET. Reads .xlsx (OOXML) and CSV into a simple typed cell grid — no Interop, no ClosedXML, no OpenXML SDK.</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageTags>xlsx;csv;spreadsheet;excel;parser;zero-dependency;import</PackageTags>
+  </PropertyGroup>
+
+</Project>
