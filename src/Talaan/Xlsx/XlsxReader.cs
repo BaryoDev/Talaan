@@ -30,11 +30,24 @@ public static class XlsxReader
         IgnoreWhitespace = true,
     };
 
-    /// <summary>Loads an XML part with DTDs prohibited. Every part Talaan reads must go through this.</summary>
-    private static XDocument LoadPart(Stream stream)
+    /// <summary>
+    /// Loads an XML part with DTDs prohibited. Every part Talaan reads must go through this.
+    /// Malformed XML (including a rejected DOCTYPE) is caught here and rethrown as
+    /// <see cref="InvalidDataException"/> naming <paramref name="partName"/>, with the original
+    /// <see cref="XmlException"/> as InnerException, so a bad .xlsx surfaces as one exception type.
+    /// This is the only place that wraps it; nothing else is caught or wrapped.
+    /// </summary>
+    private static XDocument LoadPart(Stream stream, string partName)
     {
-        using var reader = XmlReader.Create(stream, PartReaderSettings);
-        return XDocument.Load(reader);
+        try
+        {
+            using var reader = XmlReader.Create(stream, PartReaderSettings);
+            return XDocument.Load(reader);
+        }
+        catch (XmlException ex)
+        {
+            throw new InvalidDataException($"{partName} is not valid XML: {ex.Message}", ex);
+        }
     }
 
     // Excel's row limit (2^20). A row reference above this can't be a real file, and letting it
@@ -42,10 +55,10 @@ public static class XlsxReader
     private const int MaxRowNumber = 1_048_576;
 
     /// <summary>Reads the first worksheet of an .xlsx stream into a <see cref="SheetData"/> grid.</summary>
-    /// <exception cref="InvalidDataException">The stream is not a valid zip, or a required part
-    /// (the worksheet itself) is missing.</exception>
-    /// <exception cref="XmlException">A part is not well-formed XML, or carries a DOCTYPE.
-    /// DTDs are never processed; this is not wrapped in a different exception type.</exception>
+    /// <exception cref="InvalidDataException">The stream is not a valid zip, a required part (the
+    /// worksheet itself) is missing, or a part is not well-formed XML or carries a DOCTYPE. DTDs are
+    /// never processed. For an XML problem the message names the part and
+    /// <see cref="Exception.InnerException"/> is the original <see cref="XmlException"/>.</exception>
     public static SheetData Read(Stream stream)
     {
         // ZipArchive needs a seekable stream; buffer if necessary.
@@ -61,7 +74,7 @@ public static class XlsxReader
             ?? throw new InvalidDataException($"Worksheet part '{sheetPath}' not found in workbook.");
 
         using var sheetStream = entry.Open();
-        var doc = LoadPart(sheetStream);
+        var doc = LoadPart(sheetStream, sheetPath);
 
         var rows = new List<IReadOnlyList<CellValue>>();
         foreach (var rowEl in Descendants(doc.Root, "row"))
@@ -138,7 +151,7 @@ public static class XlsxReader
         if (entry is null) return result;
 
         using var s = entry.Open();
-        var doc = LoadPart(s);
+        var doc = LoadPart(s, "xl/sharedStrings.xml");
         foreach (var si in Descendants(doc.Root, "si"))
             result.Add(ExtractText(si));
         return result;
@@ -173,7 +186,7 @@ public static class XlsxReader
         if (entry is null) return dateStyleIndices;
 
         using var s = entry.Open();
-        var doc = LoadPart(s);
+        var doc = LoadPart(s, "xl/styles.xml");
 
         // Custom formats (id >= 164) whose format code looks like a date.
         var dateFormatIds = new HashSet<int>(BuiltinDateFormats);
@@ -216,7 +229,7 @@ public static class XlsxReader
         if (entry is null) return false;
 
         using var s = entry.Open();
-        var doc = LoadPart(s);
+        var doc = LoadPart(s, "xl/workbook.xml");
         var attr = (string?)Descendants(doc.Root, "workbookPr").FirstOrDefault()?.Attribute("date1904");
         return attr == "1" || string.Equals(attr, "true", StringComparison.OrdinalIgnoreCase);
     }
@@ -249,7 +262,7 @@ public static class XlsxReader
             try
             {
                 using var wbStream = wb.Open();
-                var wbDoc = LoadPart(wbStream);
+                var wbDoc = LoadPart(wbStream, "xl/workbook.xml");
                 var firstSheet = Descendants(wbDoc.Root, "sheet").FirstOrDefault();
                 var rid = firstSheet?.Attributes()
                     .FirstOrDefault(a => a.Name.LocalName == "id")?.Value; // r:id
@@ -257,7 +270,7 @@ public static class XlsxReader
                 if (rid != null)
                 {
                     using var relStream = rels.Open();
-                    var relDoc = LoadPart(relStream);
+                    var relDoc = LoadPart(relStream, "xl/_rels/workbook.xml.rels");
                     var target = Descendants(relDoc.Root, "Relationship")
                         .FirstOrDefault(r => (string?)r.Attribute("Id") == rid)?
                         .Attribute("Target")?.Value;
@@ -266,9 +279,13 @@ public static class XlsxReader
                 }
             }
             // Only fall back on a benign lookup failure (a missing rel, an unexpected shape).
-            // A DOCTYPE is rejected by LoadPart and must not be swallowed into a silent fallback
-            // that reads a different worksheet than the caller asked for.
-            catch (Exception e) when (e is not XmlException) { /* fall through to convention */ }
+            // A DOCTYPE or malformed part is rejected by LoadPart as InvalidDataException wrapping
+            // an XmlException, and must not be swallowed into a silent fallback that reads a
+            // different worksheet than the caller asked for.
+            catch (Exception e) when (e is not InvalidDataException { InnerException: XmlException })
+            {
+                /* fall through to convention */
+            }
         }
 
         // Fallback: first worksheet part by name.
