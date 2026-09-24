@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Xml;
 using Talaan;
 using Talaan.Xlsx;
@@ -184,6 +185,24 @@ public class XlsxSecurityTests
         Assert.IsType<XmlException>(ex.InnerException);
     }
 
+    // Pins the wrap on a second call site, not just the worksheet: the part name in the message
+    // must track whichever part actually failed to parse.
+    [Fact]
+    public void Malformed_XML_in_shared_strings_throws_InvalidDataException_naming_that_part()
+    {
+        var hostile = XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1" t="s"><v>0</v></c>"""),
+            sharedStringsXml: """
+                <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <si><t>unclosed</is></si>
+                </sst>
+                """);
+
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(hostile));
+        Assert.Contains("xl/sharedStrings.xml", ex.Message);
+        Assert.IsType<XmlException>(ex.InnerException);
+    }
+
     // Positive control for the change above: a well-formed workbook must still read normally, not
     // just avoid throwing.
     [Fact]
@@ -290,11 +309,14 @@ public class XlsxSecurityTests
     }
 
     /// <summary>Character offset range of the LoadPart method body, so its own XML-loading calls
-    /// don't count as offenders.</summary>
+    /// don't count as offenders. Finds the declaration by method name, not by its exact parameter
+    /// list, so a change to LoadPart's signature can't silently stop this test from finding it (and
+    /// so quietly start treating every real offender as inside LoadPart).</summary>
     private static (int start, int end) LoadPartBodyRange(string text)
     {
-        var sigIndex = text.IndexOf("XDocument LoadPart(Stream stream)", StringComparison.Ordinal);
-        if (sigIndex < 0) return (-1, -1);
+        var sigMatch = Regex.Match(text, @"\bXDocument\s+LoadPart\s*\(");
+        if (!sigMatch.Success) return (-1, -1);
+        var sigIndex = sigMatch.Index;
 
         var braceStart = text.IndexOf('{', sigIndex);
         var depth = 0;

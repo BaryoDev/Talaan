@@ -30,24 +30,19 @@ public static class XlsxReader
         IgnoreWhitespace = true,
     };
 
-    /// <summary>Loads an XML part with DTDs prohibited. Every part Talaan reads must go through this.</summary>
-    private static XDocument LoadPart(Stream stream)
-    {
-        using var reader = XmlReader.Create(stream, PartReaderSettings);
-        return XDocument.Load(reader);
-    }
-
     /// <summary>
-    /// Loads an XML part, naming it in the error if it is not well-formed. Malformed XML (including
-    /// a rejected DOCTYPE) is caught here and rethrown as <see cref="InvalidDataException"/> with the
-    /// original <see cref="XmlException"/> as InnerException, so a bad .xlsx surfaces as one
-    /// exception type. This is the only place that wraps it; nothing else is caught or wrapped.
+    /// Loads an XML part with DTDs prohibited. Every part Talaan reads must go through this.
+    /// Malformed XML (including a rejected DOCTYPE) is caught here and rethrown as
+    /// <see cref="InvalidDataException"/> naming <paramref name="partName"/>, with the original
+    /// <see cref="XmlException"/> as InnerException, so a bad .xlsx surfaces as one exception type.
+    /// This is the only place that wraps it; nothing else is caught or wrapped.
     /// </summary>
     private static XDocument LoadPart(Stream stream, string partName)
     {
         try
         {
-            return LoadPart(stream);
+            using var reader = XmlReader.Create(stream, PartReaderSettings);
+            return XDocument.Load(reader);
         }
         catch (XmlException ex)
         {
