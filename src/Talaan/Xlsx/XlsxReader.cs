@@ -37,6 +37,10 @@ public static class XlsxReader
         return XDocument.Load(reader);
     }
 
+    // Excel's row limit (2^20). A row reference above this can't be a real file, and letting it
+    // through would pad an unbounded number of empty rows.
+    private const int MaxRowNumber = 1_048_576;
+
     /// <summary>Reads the first worksheet of an .xlsx stream into a <see cref="SheetData"/> grid.</summary>
     /// <exception cref="InvalidDataException">The stream is not a valid zip, or a required part
     /// (the worksheet itself) is missing.</exception>
@@ -62,6 +66,10 @@ public static class XlsxReader
         var rows = new List<IReadOnlyList<CellValue>>();
         foreach (var rowEl in Descendants(doc.Root, "row"))
         {
+            var rowIndex = RowIndex((string?)rowEl.Attribute("r"));
+            // Pad any skipped rows with an empty row, same idea as the column padding below.
+            while (rowIndex >= 0 && rows.Count < rowIndex) rows.Add(Array.Empty<CellValue>());
+
             var cells = new List<CellValue>();
             foreach (var cEl in Elements(rowEl, "c"))
             {
@@ -86,7 +94,7 @@ public static class XlsxReader
         if (type == "inlineStr")
         {
             var isEl = Elements(cEl, "is").FirstOrDefault();
-            var text = isEl is null ? string.Empty : string.Concat(Descendants(isEl, "t").Select(t => t.Value));
+            var text = isEl is null ? string.Empty : ExtractText(isEl);
             return CellValue.OfText(text);
         }
 
@@ -132,11 +140,27 @@ public static class XlsxReader
         using var s = entry.Open();
         var doc = LoadPart(s);
         foreach (var si in Descendants(doc.Root, "si"))
-        {
-            // <si> may hold a single <t> or several rich-text <r><t> runs; concatenate all <t>.
-            result.Add(string.Concat(Descendants(si, "t").Select(t => t.Value)));
-        }
+            result.Add(ExtractText(si));
         return result;
+    }
+
+    /// <summary>
+    /// Text of a shared-string or inline-string element (both use the CT_Rst content model): a
+    /// direct &lt;t&gt; child, or the &lt;t&gt; of each &lt;r&gt; rich-text run, concatenated in
+    /// order. Skips &lt;rPh&gt; phonetic-guide runs, which also carry a &lt;t&gt; but are not part
+    /// of the string's text (issue #4).
+    /// </summary>
+    private static string ExtractText(XElement rstEl)
+    {
+        var texts = new List<string>();
+        var directT = Elements(rstEl, "t").FirstOrDefault();
+        if (directT != null) texts.Add(directT.Value);
+        foreach (var r in Elements(rstEl, "r"))
+        {
+            var rt = Elements(r, "t").FirstOrDefault();
+            if (rt != null) texts.Add(rt.Value);
+        }
+        return string.Concat(texts);
     }
 
     /// <summary>
@@ -266,6 +290,17 @@ public static class XlsxReader
 
     private static IEnumerable<XElement> Descendants(XElement? parent, string localName) =>
         parent?.Descendants().Where(e => e.Name.LocalName == localName) ?? Enumerable.Empty<XElement>();
+
+    /// <summary>Zero-based row index from a row's "r" attribute (1-based in the file). -1 if absent
+    /// or not a positive integer, in which case the row is appended at its current position. Throws
+    /// if r is above Excel's maximum row, so a hostile value can't pad an unbounded grid.</summary>
+    private static int RowIndex(string? rowRef)
+    {
+        if (!int.TryParse(rowRef, out var r) || r <= 0) return -1;
+        if (r > MaxRowNumber)
+            throw new InvalidDataException($"Row reference out of range: row {r} exceeds the maximum row {MaxRowNumber}.");
+        return r - 1;
+    }
 
     /// <summary>Zero-based column index from a cell reference like "AB12" (=> 27). -1 if absent.</summary>
     public static int ColumnIndex(string? cellRef)
