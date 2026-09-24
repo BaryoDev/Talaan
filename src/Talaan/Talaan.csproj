@@ -8,9 +8,28 @@
     <PackageId>Talaan</PackageId>
     <Version>0.1.0</Version>
     <Authors>BaryoDev</Authors>
-    <Description>A zero-dependency spreadsheet and CSV reader for .NET. Reads .xlsx (OOXML) and CSV into a simple typed cell grid — no Interop, no ClosedXML, no OpenXML SDK.</Description>
+    <Description>A zero-dependency spreadsheet and CSV reader for .NET. Reads .xlsx (OOXML) and CSV into a simple typed cell grid, no Interop, no ClosedXML, no OpenXML SDK.</Description>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
     <PackageTags>xlsx;csv;spreadsheet;excel;parser;zero-dependency;import</PackageTags>
+
+    <PackageProjectUrl>https://github.com/BaryoDev/Talaan</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/BaryoDev/Talaan</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>
