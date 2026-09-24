@@ -22,6 +22,26 @@ public static class CsvReader
         return Read(reader, delimiter);
     }
 
+    /// <summary>
+    /// Reads CSV/TSV using <paramref name="encoding"/> instead of the UTF-8 default, for files such
+    /// as a Windows-1252 export from Excel on Windows. A byte-order mark, if present, still wins:
+    /// this overload keeps <c>detectEncodingFromByteOrderMarks: true</c>, matching
+    /// <see cref="Read(Stream, char)"/>, so a UTF-8 or UTF-16 BOM overrides <paramref name="encoding"/>
+    /// rather than being misread as data.
+    /// <para>
+    /// A single-byte Windows code page such as 1252 needs <c>Encoding.GetEncoding(1252)</c>, which
+    /// throws on .NET 8 unless the caller has registered
+    /// <c>System.Text.Encoding.CodePages</c>'s <c>CodePagesEncodingProvider</c>. Talaan does not take
+    /// that package as a dependency, so that registration is the caller's job.
+    /// </para>
+    /// </summary>
+    public static SheetData Read(Stream stream, Encoding encoding, char delimiter = ',')
+    {
+        using var reader = new StreamReader(
+            stream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: -1, leaveOpen: true);
+        return Read(reader, delimiter);
+    }
+
     public static SheetData Read(TextReader reader, char delimiter = ',')
     {
         var rows = new List<IReadOnlyList<CellValue>>();
