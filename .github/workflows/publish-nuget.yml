@@ -26,6 +26,17 @@ jobs:
           dotnet restore
           dotnet build src/Talaan/Talaan.csproj --configuration Release --no-restore /p:Version=${{ github.event.inputs.version }}
 
+      - name: Test
+        run: dotnet test --configuration Release
+
+      - name: Check version matches the csproj
+        run: |
+          csproj=$(grep -oP '(?<=<Version>)[^<]+' src/Talaan/Talaan.csproj)
+          if [ "$csproj" != "${{ github.event.inputs.version }}" ]; then
+            echo "::error::input version ${{ github.event.inputs.version }} does not match csproj $csproj"
+            exit 1
+          fi
+
       - name: Pack
         run: dotnet pack src/Talaan/Talaan.csproj --configuration Release --no-build --output ./nupkgs /p:Version=${{ github.event.inputs.version }}
 

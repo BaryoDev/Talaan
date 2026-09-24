@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <PackageId>Talaan</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>BaryoDev</Authors>
     <Description>A zero-dependency spreadsheet and CSV reader for .NET. Reads .xlsx (OOXML) and CSV into a simple typed cell grid, no Interop, no ClosedXML, no OpenXML SDK.</Description>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
@@ -16,6 +16,24 @@
     <RepositoryUrl>https://github.com/BaryoDev/Talaan</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
+
+    <PackageReleaseNotes>0.2.0
+Behaviour changes:
+- An unterminated quoted field in CSV now throws InvalidDataException instead of reading to the end of the file.
+- Any malformed or DTD-bearing XML part in an .xlsx now throws InvalidDataException naming the part, with the XmlException as InnerException. Catch InvalidDataException for any bad file.
+- Cell references past column XFD and row numbers past 1048576 throw InvalidDataException.
+
+Fixes:
+- DTD processing is prohibited on every workbook XML part (entity expansion and external entities).
+- Rows missing from sheetData no longer shift later rows up.
+- Workbooks using the 1904 date system no longer read dates 1462 days early.
+- Phonetic runs (rPh) are no longer added to string text.
+- CsvReader.Read leaves the caller's stream open.
+- CellValue.AsString keeps the time for dates that have one.
+
+New:
+- Encoding overloads for CSV: CsvReader.Read(Stream, Encoding, char), Spreadsheet.Read(Stream, SpreadsheetFormat, Encoding) and Spreadsheet.ReadFile(string, Encoding).
+- The package links the repository and ships the readme, icon and symbols.</PackageReleaseNotes>
 
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>

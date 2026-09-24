@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.svg" width="96" height="96" alt="Talaan logo" />
+  <img src="https://raw.githubusercontent.com/BaryoDev/Talaan/master/assets/icon.png" width="96" height="96" alt="Talaan logo" />
   <h1>Talaan</h1>
   <p><em>A zero-dependency spreadsheet &amp; CSV reader for .NET.</em></p>
 </div>
@@ -7,15 +7,15 @@
 ---
 
 **Talaan** (Filipino for *record / list / table*) reads `.xlsx` and CSV files into a simple, typed
-cell grid — with **no external dependencies**. No Excel Interop, no ClosedXML, no OpenXML SDK. An
+cell grid, with **no external dependencies**. No Excel Interop, no ClosedXML, no OpenXML SDK. An
 `.xlsx` is just a zip of XML, and Talaan walks those parts directly using only the .NET base class
 library (`System.IO.Compression` + `System.Xml`).
 
 ## Why
 
 - **Zero dependencies.** Nothing to audit, nothing to update, no transitive surprises. One small assembly.
-- **Typed cells.** Numbers come back as numbers, dates as `DateTime`, booleans as `bool` — not stringly-typed guesses. Excel serial dates and shared strings are resolved for you.
-- **Raw grid, no magic.** Talaan hands you the sheet exactly as laid out. *You* decide which row is the header and which rows to skip — perfect for real-world files with title rows, sections, and blanks.
+- **Typed cells.** Numbers come back as numbers, dates as `DateTime`, booleans as `bool`, not stringly-typed guesses. Excel serial dates and shared strings are resolved for you.
+- **Raw grid, no magic.** Talaan hands you the sheet exactly as laid out. *You* decide which row is the header and which rows to skip, which suits real-world files with title rows, sections, and blanks.
 
 ## Install
 
@@ -69,7 +69,7 @@ You can also bypass detection: `Spreadsheet.Read(stream, SpreadsheetFormat.Xlsx)
 ## Design notes
 
 - **Dates.** `.xlsx` stores dates as serial numbers; Talaan inspects the workbook stylesheet
-  (`cellXfs` → number format) to decide whether a numeric cell is a date, then converts via the OLE
+  (`cellXfs` to number format) to decide whether a numeric cell is a date, then converts via the OLE
   Automation epoch. Ambiguous `m` (month vs. minute) is ignored in favour of unambiguous `y`/`d`.
 - **Column alignment.** Cell references (`A1`, `AB12`) are honoured, so skipped/blank cells become
   `CellValue.Empty` and columns stay aligned.
@@ -78,7 +78,7 @@ You can also bypass detection: `Spreadsheet.Read(stream, SpreadsheetFormat.Xlsx)
 ## Scope (by design)
 
 Talaan **reads**; it does not write. It reads the **first worksheet**. Formulas are returned by their
-last cached result. If you need multi-sheet, writing, or styling, this isn't that library — and that
+last cached result. If you need multi-sheet, writing, or styling, this isn't that library, and that
 is the point.
 
 ## License
