@@ -103,16 +103,14 @@ public class XlsxSecurityTests
         Assert.Throws<XmlException>(() => XlsxReader.Read(hostile));
     }
 
-    // ResolveFirstSheetPath wraps workbook.xml and workbook.xml.rels in a try/catch that already
-    // falls back to the worksheets/ convention on any failure (a pre-existing design for a
-    // missing or malformed workbook.xml). A DOCTYPE there is rejected at the same LoadPart call
-    // as the other parts, but the caller sees that as a safe fallback, not a thrown XmlException:
-    // the malicious part is never used and no entity content reaches a cell.
+    // xl/workbook.xml is read by ReadDate1904 before ResolveFirstSheetPath runs, and that call has
+    // no try/catch, so a DOCTYPE there throws XmlException straight out of Read(), same as the
+    // worksheet, shared strings and styles parts.
     [Fact]
-    public void External_entity_in_workbook_xml_does_not_leak_and_falls_back_to_convention()
+    public void External_entity_in_workbook_xml_is_rejected()
     {
-        var xlsx = XlsxBuilder.Build(
-            sheetXml: XlsxBuilder.Row("""<c r="A1" t="inlineStr"><is><t>safe</t></is></c>"""),
+        var hostile = XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1"><v>1</v></c>"""),
             workbookXml: $"""
                 {ExternalEntityDoctype}
                 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -122,11 +120,14 @@ public class XlsxSecurityTests
                 </workbook>
                 """);
 
-        var sheet = XlsxReader.Read(xlsx);
-
-        Assert.Equal("safe", sheet.At(0, 0).Text);
+        Assert.Throws<XmlException>(() => XlsxReader.Read(hostile));
     }
 
+    // workbook.xml.rels is only read inside ResolveFirstSheetPath's try/catch, which already
+    // falls back to the worksheets/ convention on any failure (a pre-existing design for a
+    // missing or malformed workbook.xml). A DOCTYPE there is rejected at the same LoadPart call
+    // as the other parts, but the caller sees that as a safe fallback, not a thrown XmlException:
+    // the malicious part is never used and no entity content reaches a cell.
     [Fact]
     public void External_entity_in_workbook_rels_does_not_leak_and_falls_back_to_convention()
     {

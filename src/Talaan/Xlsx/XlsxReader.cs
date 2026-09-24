@@ -183,7 +183,7 @@ public static class XlsxReader
         if (entry is null) return false;
 
         using var s = entry.Open();
-        var doc = XDocument.Load(s);
+        var doc = LoadPart(s);
         var attr = (string?)Descendants(doc.Root, "workbookPr").FirstOrDefault()?.Attribute("date1904");
         return attr == "1" || string.Equals(attr, "true", StringComparison.OrdinalIgnoreCase);
     }
