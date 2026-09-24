@@ -161,6 +161,27 @@ public class XlsxReaderTests
     }
 
     [Fact]
+    public void Row_reference_above_the_maximum_row_throws()
+    {
+        var stream = XlsxBuilder.Build(
+            XlsxBuilder.Sheet(XlsxBuilder.RowAt(1048577, """<c r="A1048577"><v>1</v></c>""")));
+
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(stream));
+        Assert.Contains("1048577", ex.Message);
+    }
+
+    [Fact]
+    public void Row_reference_at_the_maximum_row_still_reads()
+    {
+        // Boundary case for the cap above: the last legal row still works, padding the full grid.
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            XlsxBuilder.Sheet(XlsxBuilder.RowAt(1048576, """<c r="A1048576"><v>1</v></c>"""))));
+
+        Assert.Equal(1_048_576, sheet.RowCount);
+        Assert.Equal(1, sheet.At(1_048_575, 0).Number);
+    }
+
+    [Fact]
     public void First_sheet_resolves_through_workbook_rels_not_alphabetical_fallback()
     {
         // Two worksheet parts exist. "aaa_decoy.xml" sorts first alphabetically, so this only
