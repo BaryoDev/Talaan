@@ -19,11 +19,15 @@ public static class XlsxReader
     // A workbook part never legitimately has a DOCTYPE. Prohibiting it also blocks entity
     // expansion (billion-laughs style DoS), which is the actual risk: external entities already
     // fail to resolve with no XmlResolver, but an internal DTD subset is still parsed by default.
+    // IgnoreWhitespace = true matches what plain unguarded XML loading did before this fix: a
+    // <t> with no xml:space="preserve" and only whitespace content reads as "", one with
+    // xml:space="preserve" still reads as the literal whitespace. This is a security fix, not
+    // the place to change that.
     private static readonly XmlReaderSettings PartReaderSettings = new()
     {
         DtdProcessing = DtdProcessing.Prohibit,
         XmlResolver = null,
-        IgnoreWhitespace = false, // <t> content is significant, see ReadSharedStrings
+        IgnoreWhitespace = true,
     };
 
     /// <summary>Loads an XML part with DTDs prohibited. Every part Talaan reads must go through this.</summary>
@@ -33,6 +37,11 @@ public static class XlsxReader
         return XDocument.Load(reader);
     }
 
+    /// <summary>Reads the first worksheet of an .xlsx stream into a <see cref="SheetData"/> grid.</summary>
+    /// <exception cref="InvalidDataException">The stream is not a valid zip, or a required part
+    /// (the worksheet itself) is missing.</exception>
+    /// <exception cref="XmlException">A part is not well-formed XML, or carries a DOCTYPE.
+    /// DTDs are never processed; this is not wrapped in a different exception type.</exception>
     public static SheetData Read(Stream stream)
     {
         // ZipArchive needs a seekable stream; buffer if necessary.
@@ -232,7 +241,10 @@ public static class XlsxReader
                         return target!.StartsWith("/") ? target!.TrimStart('/') : "xl/" + target;
                 }
             }
-            catch { /* fall through to convention */ }
+            // Only fall back on a benign lookup failure (a missing rel, an unexpected shape).
+            // A DOCTYPE is rejected by LoadPart and must not be swallowed into a silent fallback
+            // that reads a different worksheet than the caller asked for.
+            catch (Exception e) when (e is not XmlException) { /* fall through to convention */ }
         }
 
         // Fallback: first worksheet part by name.
