@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Talaan.Xlsx;
@@ -15,6 +16,23 @@ public static class XlsxReader
     private static readonly HashSet<int> BuiltinDateFormats =
         new(new[] { 14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47 });
 
+    // A workbook part never legitimately has a DOCTYPE. Prohibiting it also blocks entity
+    // expansion (billion-laughs style DoS), which is the actual risk: external entities already
+    // fail to resolve with no XmlResolver, but an internal DTD subset is still parsed by default.
+    private static readonly XmlReaderSettings PartReaderSettings = new()
+    {
+        DtdProcessing = DtdProcessing.Prohibit,
+        XmlResolver = null,
+        IgnoreWhitespace = false, // <t> content is significant, see ReadSharedStrings
+    };
+
+    /// <summary>Loads an XML part with DTDs prohibited. Every part Talaan reads must go through this.</summary>
+    private static XDocument LoadPart(Stream stream)
+    {
+        using var reader = XmlReader.Create(stream, PartReaderSettings);
+        return XDocument.Load(reader);
+    }
+
     public static SheetData Read(Stream stream)
     {
         // ZipArchive needs a seekable stream; buffer if necessary.
@@ -29,7 +47,7 @@ public static class XlsxReader
             ?? throw new InvalidDataException($"Worksheet part '{sheetPath}' not found in workbook.");
 
         using var sheetStream = entry.Open();
-        var doc = XDocument.Load(sheetStream);
+        var doc = LoadPart(sheetStream);
 
         var rows = new List<IReadOnlyList<CellValue>>();
         foreach (var rowEl in Descendants(doc.Root, "row"))
@@ -98,7 +116,7 @@ public static class XlsxReader
         if (entry is null) return result;
 
         using var s = entry.Open();
-        var doc = XDocument.Load(s);
+        var doc = LoadPart(s);
         foreach (var si in Descendants(doc.Root, "si"))
         {
             // <si> may hold a single <t> or several rich-text <r><t> runs; concatenate all <t>.
@@ -117,7 +135,7 @@ public static class XlsxReader
         if (entry is null) return dateStyleIndices;
 
         using var s = entry.Open();
-        var doc = XDocument.Load(s);
+        var doc = LoadPart(s);
 
         // Custom formats (id >= 164) whose format code looks like a date.
         var dateFormatIds = new HashSet<int>(BuiltinDateFormats);
@@ -178,7 +196,7 @@ public static class XlsxReader
             try
             {
                 using var wbStream = wb.Open();
-                var wbDoc = XDocument.Load(wbStream);
+                var wbDoc = LoadPart(wbStream);
                 var firstSheet = Descendants(wbDoc.Root, "sheet").FirstOrDefault();
                 var rid = firstSheet?.Attributes()
                     .FirstOrDefault(a => a.Name.LocalName == "id")?.Value; // r:id
@@ -186,7 +204,7 @@ public static class XlsxReader
                 if (rid != null)
                 {
                     using var relStream = rels.Open();
-                    var relDoc = XDocument.Load(relStream);
+                    var relDoc = LoadPart(relStream);
                     var target = Descendants(relDoc.Root, "Relationship")
                         .FirstOrDefault(r => (string?)r.Attribute("Id") == rid)?
                         .Attribute("Target")?.Value;
