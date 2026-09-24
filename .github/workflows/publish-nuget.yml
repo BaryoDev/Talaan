@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      VERSION: ${{ github.event.inputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,24 +23,28 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Check version matches the csproj
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::not a version number: $VERSION"
+            exit 1
+          fi
+          csproj=$(grep -oP '(?<=<Version>)[^<]+' src/Talaan/Talaan.csproj)
+          if [ "$csproj" != "$VERSION" ]; then
+            echo "::error::input version $VERSION does not match csproj $csproj"
+            exit 1
+          fi
+
       - name: Restore & build
         run: |
           dotnet restore
-          dotnet build src/Talaan/Talaan.csproj --configuration Release --no-restore /p:Version=${{ github.event.inputs.version }}
+          dotnet build src/Talaan/Talaan.csproj --configuration Release --no-restore /p:Version="$VERSION"
 
       - name: Test
         run: dotnet test --configuration Release
 
-      - name: Check version matches the csproj
-        run: |
-          csproj=$(grep -oP '(?<=<Version>)[^<]+' src/Talaan/Talaan.csproj)
-          if [ "$csproj" != "${{ github.event.inputs.version }}" ]; then
-            echo "::error::input version ${{ github.event.inputs.version }} does not match csproj $csproj"
-            exit 1
-          fi
-
       - name: Pack
-        run: dotnet pack src/Talaan/Talaan.csproj --configuration Release --no-build --output ./nupkgs /p:Version=${{ github.event.inputs.version }}
+        run: dotnet pack src/Talaan/Talaan.csproj --configuration Release --no-build --output ./nupkgs /p:Version="$VERSION"
 
       - name: Check for NuGet API key
         run: |
@@ -54,5 +60,5 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git tag -a "v${{ github.event.inputs.version }}" -m "Release v${{ github.event.inputs.version }}"
-          git push origin "v${{ github.event.inputs.version }}"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
