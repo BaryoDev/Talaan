@@ -6,6 +6,12 @@ namespace Talaan.Csv;
 /// A small RFC-4180 CSV reader. Handles quoted fields, escaped quotes (""), and commas/newlines
 /// inside quotes. Every field is returned as a <see cref="CellKind.Text"/> cell (CSV carries no
 /// type information); empty fields become <see cref="CellValue.Empty"/>.
+///
+/// A quoted field left open at end of stream throws <see cref="InvalidDataException"/> naming the
+/// record it started in, rather than silently swallowing the rest of the file: returning one row
+/// where the file had ten thousand is data loss, not leniency. Text found right after a closing
+/// quote (<c>"a"b</c>) is still appended to the same field instead of rejected; that loses no data,
+/// so it stays lenient for now.
 /// </summary>
 public static class CsvReader
 {
@@ -23,6 +29,7 @@ public static class CsvReader
         bool inQuotes = false;
         bool fieldHasContent = false; // distinguishes a started field from a brand-new row
         bool rowHasContent = false;
+        int quoteStartRecord = 0; // 1-based record the currently open quote began in, 0 when not in a quote
 
         void EndField()
         {
@@ -61,6 +68,7 @@ public static class CsvReader
             if (c == '"')
             {
                 inQuotes = true;
+                quoteStartRecord = rows.Count + 1;
                 fieldHasContent = true;
                 rowHasContent = true;
             }
@@ -85,6 +93,9 @@ public static class CsvReader
                 rowHasContent = true;
             }
         }
+
+        if (inQuotes)
+            throw new InvalidDataException($"Unterminated quoted field: record {quoteStartRecord} opens a quote that is never closed.");
 
         // Flush a trailing field/row only if the file didn't end on a clean newline.
         if (fieldHasContent || field.Length > 0 || row.Count > 0 || rowHasContent)
