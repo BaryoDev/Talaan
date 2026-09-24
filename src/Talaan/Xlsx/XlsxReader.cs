@@ -59,7 +59,7 @@ public static class XlsxReader
         if (type == "inlineStr")
         {
             var isEl = Elements(cEl, "is").FirstOrDefault();
-            var text = isEl is null ? string.Empty : string.Concat(Descendants(isEl, "t").Select(t => t.Value));
+            var text = isEl is null ? string.Empty : ExtractText(isEl);
             return CellValue.OfText(text);
         }
 
@@ -105,11 +105,27 @@ public static class XlsxReader
         using var s = entry.Open();
         var doc = XDocument.Load(s);
         foreach (var si in Descendants(doc.Root, "si"))
-        {
-            // <si> may hold a single <t> or several rich-text <r><t> runs; concatenate all <t>.
-            result.Add(string.Concat(Descendants(si, "t").Select(t => t.Value)));
-        }
+            result.Add(ExtractText(si));
         return result;
+    }
+
+    /// <summary>
+    /// Text of a shared-string or inline-string element (both use the CT_Rst content model): a
+    /// direct &lt;t&gt; child, or the &lt;t&gt; of each &lt;r&gt; rich-text run, concatenated in
+    /// order. Skips &lt;rPh&gt; phonetic-guide runs, which also carry a &lt;t&gt; but are not part
+    /// of the string's text (issue #4).
+    /// </summary>
+    private static string ExtractText(XElement rstEl)
+    {
+        var texts = new List<string>();
+        var directT = Elements(rstEl, "t").FirstOrDefault();
+        if (directT != null) texts.Add(directT.Value);
+        foreach (var r in Elements(rstEl, "r"))
+        {
+            var rt = Elements(r, "t").FirstOrDefault();
+            if (rt != null) texts.Add(rt.Value);
+        }
+        return string.Concat(texts);
     }
 
     /// <summary>

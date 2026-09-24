@@ -40,6 +40,92 @@ public class XlsxReaderTests
     }
 
     [Fact]
+    public void Shared_string_with_rPh_reads_only_the_base_text()
+    {
+        // <rPh> holds a Japanese furigana reading alongside the base <t>. It is not part of the
+        // string's text and must not be concatenated into it (issue #4).
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1" t="s"><v>0</v></c>"""),
+            sharedStringsXml: """
+                <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <si><t>漢字</t><rPh sb="0" eb="2"><t>かんじ</t></rPh><phoneticPr fontId="1"/></si>
+                </sst>
+                """));
+
+        Assert.Equal("漢字", sheet.At(0, 0).Text);
+    }
+
+    [Fact]
+    public void Shared_string_rich_text_runs_still_concatenate()
+    {
+        // Positive control: rich text split across several <r><t> runs is a real, supported case
+        // and must still be rejoined, rPh or not.
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1" t="s"><v>0</v></c>"""),
+            sharedStringsXml: """
+                <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <si><r><t>Hello</t></r><r><t> World</t></r></si>
+                </sst>
+                """));
+
+        Assert.Equal("Hello World", sheet.At(0, 0).Text);
+    }
+
+    [Fact]
+    public void Shared_string_rich_text_run_with_rPh_reads_only_the_base_text()
+    {
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1" t="s"><v>0</v></c>"""),
+            sharedStringsXml: """
+                <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <si><r><t>東京</t></r><rPh sb="0" eb="2"><t>とうきょう</t></rPh></si>
+                </sst>
+                """));
+
+        Assert.Equal("東京", sheet.At(0, 0).Text);
+    }
+
+    [Fact]
+    public void Shared_string_plain_t_is_unaffected_by_the_rPh_fix()
+    {
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1" t="s"><v>0</v></c>"""),
+            sharedStringsXml: """
+                <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <si><t>Plain</t></si>
+                </sst>
+                """));
+
+        Assert.Equal("Plain", sheet.At(0, 0).Text);
+    }
+
+    [Fact]
+    public void Shared_string_preserves_xml_space_preserve_whitespace()
+    {
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1" t="s"><v>0</v></c>"""),
+            sharedStringsXml: """
+                <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <si><t xml:space="preserve">  spaced  </t></si>
+                </sst>
+                """));
+
+        Assert.Equal("  spaced  ", sheet.At(0, 0).Text);
+    }
+
+    [Fact]
+    public void Inline_string_with_rPh_reads_only_the_base_text()
+    {
+        // Inline strings (<is>) share the same CT_Rst content model as shared strings, so they can
+        // carry <rPh> too.
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row(
+                """<c r="A1" t="inlineStr"><is><t>漢字</t><rPh sb="0" eb="2"><t>かんじ</t></rPh></is></c>""")));
+
+        Assert.Equal("漢字", sheet.At(0, 0).Text);
+    }
+
+    [Fact]
     public void Number_cell_reads_as_a_number()
     {
         var sheet = XlsxReader.Read(XlsxBuilder.Build(
