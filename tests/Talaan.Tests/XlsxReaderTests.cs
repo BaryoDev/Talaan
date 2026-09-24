@@ -99,6 +99,89 @@ public class XlsxReaderTests
     }
 
     [Fact]
+    public void Omitted_row_is_padded_so_later_rows_keep_their_position()
+    {
+        // row 2 is missing from sheetData (Excel omits empty rows), so row 3's content must
+        // land at index 2, not shift up to index 1.
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            XlsxBuilder.Sheet(
+                XlsxBuilder.RowAt(1, """<c r="A1" t="inlineStr"><is><t>top</t></is></c>"""),
+                XlsxBuilder.RowAt(3, """<c r="A3" t="inlineStr"><is><t>bottom</t></is></c>"""))));
+
+        Assert.Equal(3, sheet.RowCount);
+        Assert.Equal("top", sheet.At(0, 0).Text);
+        Assert.True(sheet.At(1, 0).IsBlank);
+        Assert.Equal("bottom", sheet.At(2, 0).Text);
+    }
+
+    [Fact]
+    public void Leading_gap_pads_rows_before_the_first_row_present()
+    {
+        // The sheet starts at row 3, so rows 0 and 1 must be padded blank before it.
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            XlsxBuilder.Sheet(
+                XlsxBuilder.RowAt(3, """<c r="A3" t="inlineStr"><is><t>first</t></is></c>"""))));
+
+        Assert.Equal(3, sheet.RowCount);
+        Assert.True(sheet.At(0, 0).IsBlank);
+        Assert.True(sheet.At(1, 0).IsBlank);
+        Assert.Equal("first", sheet.At(2, 0).Text);
+    }
+
+    [Fact]
+    public void Cells_still_align_within_a_column_gap_when_rows_are_padded()
+    {
+        // Positive control: column gaps (A1 then C1) still pad correctly once row padding exists.
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            XlsxBuilder.Sheet(
+                XlsxBuilder.RowAt(1, """<c r="A1"><v>1</v></c><c r="C1"><v>3</v></c>"""),
+                XlsxBuilder.RowAt(4, """<c r="A4"><v>4</v></c>"""))));
+
+        Assert.Equal(4, sheet.RowCount);
+        Assert.Equal(3, sheet.ColumnCount);
+        Assert.Equal(1, sheet.At(0, 0).Number);
+        Assert.True(sheet.At(0, 1).IsBlank);
+        Assert.Equal(3, sheet.At(0, 2).Number);
+        Assert.Equal(4, sheet.At(3, 0).Number);
+    }
+
+    [Fact]
+    public void Sheet_with_no_row_gaps_is_unchanged()
+    {
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            XlsxBuilder.Sheet(
+                XlsxBuilder.RowAt(1, """<c r="A1"><v>1</v></c>"""),
+                XlsxBuilder.RowAt(2, """<c r="A2"><v>2</v></c>"""),
+                XlsxBuilder.RowAt(3, """<c r="A3"><v>3</v></c>"""))));
+
+        Assert.Equal(3, sheet.RowCount);
+        Assert.Equal(1, sheet.At(0, 0).Number);
+        Assert.Equal(2, sheet.At(1, 0).Number);
+        Assert.Equal(3, sheet.At(2, 0).Number);
+    }
+
+    [Fact]
+    public void Row_reference_above_the_maximum_row_throws()
+    {
+        var stream = XlsxBuilder.Build(
+            XlsxBuilder.Sheet(XlsxBuilder.RowAt(1048577, """<c r="A1048577"><v>1</v></c>""")));
+
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(stream));
+        Assert.Contains("1048577", ex.Message);
+    }
+
+    [Fact]
+    public void Row_reference_at_the_maximum_row_still_reads()
+    {
+        // Boundary case for the cap above: the last legal row still works, padding the full grid.
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            XlsxBuilder.Sheet(XlsxBuilder.RowAt(1048576, """<c r="A1048576"><v>1</v></c>"""))));
+
+        Assert.Equal(1_048_576, sheet.RowCount);
+        Assert.Equal(1, sheet.At(1_048_575, 0).Number);
+    }
+
+    [Fact]
     public void Date1904_serial_reads_as_the_correct_date()
     {
         // The 1904 date system counts from 1904-01-01. Its serials are 1462 days behind the 1900

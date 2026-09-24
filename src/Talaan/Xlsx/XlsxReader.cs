@@ -15,6 +15,10 @@ public static class XlsxReader
     private static readonly HashSet<int> BuiltinDateFormats =
         new(new[] { 14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47 });
 
+    // Excel's row limit (2^20). A row reference above this can't be a real file, and letting it
+    // through would pad an unbounded number of empty rows.
+    private const int MaxRowNumber = 1_048_576;
+
     public static SheetData Read(Stream stream)
     {
         // ZipArchive needs a seekable stream; buffer if necessary.
@@ -35,6 +39,10 @@ public static class XlsxReader
         var rows = new List<IReadOnlyList<CellValue>>();
         foreach (var rowEl in Descendants(doc.Root, "row"))
         {
+            var rowIndex = RowIndex((string?)rowEl.Attribute("r"));
+            // Pad any skipped rows with an empty row, same idea as the column padding below.
+            while (rowIndex >= 0 && rows.Count < rowIndex) rows.Add(Array.Empty<CellValue>());
+
             var cells = new List<CellValue>();
             foreach (var cEl in Elements(rowEl, "c"))
             {
@@ -236,6 +244,17 @@ public static class XlsxReader
 
     private static IEnumerable<XElement> Descendants(XElement? parent, string localName) =>
         parent?.Descendants().Where(e => e.Name.LocalName == localName) ?? Enumerable.Empty<XElement>();
+
+    /// <summary>Zero-based row index from a row's "r" attribute (1-based in the file). -1 if absent
+    /// or not a positive integer, in which case the row is appended at its current position. Throws
+    /// if r is above Excel's maximum row, so a hostile value can't pad an unbounded grid.</summary>
+    private static int RowIndex(string? rowRef)
+    {
+        if (!int.TryParse(rowRef, out var r) || r <= 0) return -1;
+        if (r > MaxRowNumber)
+            throw new InvalidDataException($"Row reference out of range: row {r} exceeds the maximum row {MaxRowNumber}.");
+        return r - 1;
+    }
 
     /// <summary>Zero-based column index from a cell reference like "AB12" (=> 27). -1 if absent.</summary>
     public static int ColumnIndex(string? cellRef)
