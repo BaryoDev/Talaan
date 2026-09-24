@@ -66,6 +66,26 @@ cell.AsString()   // best-effort display: invariant numbers, ISO-8601 dates
 
 You can also bypass detection: `Spreadsheet.Read(stream, SpreadsheetFormat.Xlsx)`.
 
+### Reading a CSV in a non-UTF-8 encoding
+
+CSV defaults to UTF-8. A file exported by "Excel on Windows > CSV (Comma delimited)" is usually
+Windows-1252 with no byte-order mark, so it needs an explicit encoding:
+
+```csharp
+using System.Text;
+
+// Code page 1252 needs the CodePages package, which Talaan does not depend on:
+//   dotnet add package System.Text.Encoding.CodePages
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+SheetData sheet = Spreadsheet.ReadFile("members.csv", Encoding.GetEncoding(1252));
+```
+
+`Encoding.Latin1` is built in and works without the package, but it is not the same as 1252:
+bytes 0x80 to 0x9F (the euro sign, curly quotes, dashes) come back as control characters.
+
+`CsvReader.Read(stream, encoding)` takes the same encoding for CSV/TSV without going through
+`Spreadsheet`.
+
 ## Design notes
 
 - **Dates.** `.xlsx` stores dates as serial numbers; Talaan inspects the workbook stylesheet
