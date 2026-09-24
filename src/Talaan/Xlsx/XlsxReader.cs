@@ -237,7 +237,13 @@ public static class XlsxReader
     private static IEnumerable<XElement> Descendants(XElement? parent, string localName) =>
         parent?.Descendants().Where(e => e.Name.LocalName == localName) ?? Enumerable.Empty<XElement>();
 
-    /// <summary>Zero-based column index from a cell reference like "AB12" (=> 27). -1 if absent.</summary>
+    // Excel's last column is XFD, a zero-based index of 16383.
+    private const int MaxColumnIndex = 16383;
+
+    /// <summary>Zero-based column index from a cell reference like "AB12" (=> 27). -1 if absent. Throws
+    /// <see cref="InvalidDataException"/>, naming the reference, if the column named is past Excel's
+    /// maximum (XFD): that is not a column Excel could have written, and letting the accumulator run
+    /// is how a crafted reference used to overflow to a negative number.</summary>
     public static int ColumnIndex(string? cellRef)
     {
         if (string.IsNullOrEmpty(cellRef)) return -1;
@@ -256,6 +262,10 @@ public static class XlsxReader
                 any = true;
             }
             else break;
+
+            // Checked every character, so the accumulator can never overflow before this runs.
+            if (index > MaxColumnIndex + 1)
+                throw new InvalidDataException($"Cell reference '{cellRef}' names a column past Excel's maximum (XFD).");
         }
         return any ? index - 1 : -1;
     }

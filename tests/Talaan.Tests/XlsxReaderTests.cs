@@ -13,8 +13,47 @@ public class XlsxReaderTests
     [InlineData("Z9", 25)]
     [InlineData("AA1", 26)]
     [InlineData("AB12", 27)]
+    [InlineData("XFD1", 16383)]  // Excel's last column, the top of the valid range
+    [InlineData("a1", 0)]        // lowercase accepted, same as uppercase (pinned as-is)
+    [InlineData("$A$1", -1)]     // '$' stops the scan before any letter (pinned as-is)
+    [InlineData("1", -1)]        // no column letters
+    [InlineData("", -1)]         // empty
     public void Column_index_from_reference(string cellRef, int expected)
         => Assert.Equal(expected, XlsxReader.ColumnIndex(cellRef));
+
+    [Theory]
+    [InlineData("XFE1")]              // one column past XFD
+    [InlineData("AAAAAAAAAAAAAAA1")]  // long reference that used to overflow and wrap negative
+    public void Column_index_throws_past_the_last_column(string cellRef)
+        => Assert.Throws<InvalidDataException>(() => XlsxReader.ColumnIndex(cellRef));
+
+    [Fact]
+    public void Cell_at_the_last_valid_column_is_placed()
+    {
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="XFD1" t="inlineStr"><is><t>last</t></is></c>""")));
+
+        Assert.Equal("last", sheet.At(0, 16383).Text);
+    }
+
+    [Fact]
+    public void Reading_a_cell_past_the_last_column_throws_naming_the_reference()
+    {
+        var stream = XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="XFE1" t="inlineStr"><is><t>x</t></is></c>"""));
+
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(stream));
+        Assert.Contains("XFE1", ex.Message);
+    }
+
+    [Fact]
+    public void Reading_a_crafted_long_column_reference_throws_instead_of_padding()
+    {
+        var stream = XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="AAAAAAAAAAAAAAA1" t="inlineStr"><is><t>x</t></is></c>"""));
+
+        Assert.Throws<InvalidDataException>(() => XlsxReader.Read(stream));
+    }
 
     [Fact]
     public void Shared_string_resolves_through_the_shared_strings_table()
