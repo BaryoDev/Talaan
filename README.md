@@ -74,14 +74,14 @@ Windows-1252 with no byte-order mark, so it needs an explicit encoding:
 ```csharp
 using System.Text;
 
-// Encoding.Latin1 is built in and close enough for western European text.
-SheetData sheet = Spreadsheet.ReadFile("members.csv", Encoding.Latin1);
-
-// The real code page needs the CodePages package, which Talaan does not depend on:
+// Code page 1252 needs the CodePages package, which Talaan does not depend on:
 //   dotnet add package System.Text.Encoding.CodePages
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-SheetData sheet2 = Spreadsheet.ReadFile("members.csv", Encoding.GetEncoding(1252));
+SheetData sheet = Spreadsheet.ReadFile("members.csv", Encoding.GetEncoding(1252));
 ```
+
+`Encoding.Latin1` is built in and works without the package, but it is not the same as 1252:
+bytes 0x80 to 0x9F (the euro sign, curly quotes, dashes) come back as control characters.
 
 `CsvReader.Read(stream, encoding)` takes the same encoding for CSV/TSV without going through
 `Spreadsheet`.
