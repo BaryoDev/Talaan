@@ -91,4 +91,49 @@ public class CsvReaderTests
         Assert.Equal("a\"b", sheet.At(0, 0).AsString());
         Assert.Equal("c", sheet.At(0, 1).AsString());
     }
+
+    [Fact]
+    public void Read_leaves_the_callers_stream_open()
+    {
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes("a,b\n1,2\n"));
+
+        CsvReader.Read(stream);
+
+        Assert.True(stream.CanRead);
+        stream.Seek(0, SeekOrigin.Begin);
+        var sheet = CsvReader.Read(stream);
+        Assert.Equal("1", sheet.At(1, 0).AsString());
+    }
+
+    [Fact]
+    public void Spreadsheet_Read_with_csv_name_leaves_the_callers_stream_open()
+    {
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes("a,b\n1,2\n"));
+
+        Spreadsheet.Read(stream, "upload.csv");
+
+        Assert.True(stream.CanRead);
+        stream.Seek(0, SeekOrigin.Begin);
+        var sheet = Spreadsheet.Read(stream, "upload.csv");
+        Assert.Equal("1", sheet.At(1, 0).AsString());
+    }
+
+    [Fact]
+    public void Spreadsheet_ReadFile_releases_the_file_handle()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".csv");
+        try
+        {
+            File.WriteAllText(path, "a,b\n1,2\n", Encoding.UTF8);
+
+            Spreadsheet.ReadFile(path);
+
+            // Throws if Talaan left the file open: FileShare.None fails on a still-open handle.
+            using var exclusive = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

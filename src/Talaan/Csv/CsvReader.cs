@@ -17,7 +17,8 @@ public static class CsvReader
 {
     public static SheetData Read(Stream stream, char delimiter = ',')
     {
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        using var reader = new StreamReader(
+            stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: -1, leaveOpen: true);
         return Read(reader, delimiter);
     }
 

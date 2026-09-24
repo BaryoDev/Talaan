@@ -41,6 +41,7 @@ public static class XlsxReader
 
         var sharedStrings = ReadSharedStrings(archive);
         var dateStyles = ReadDateStyles(archive);
+        var date1904 = ReadDate1904(archive);
         var sheetPath = ResolveFirstSheetPath(archive);
 
         var entry = GetEntry(archive, sheetPath)
@@ -58,7 +59,7 @@ public static class XlsxReader
                 var colIndex = ColumnIndex((string?)cEl.Attribute("r"));
                 // Pad any skipped columns with empties so alignment is preserved.
                 while (colIndex >= 0 && cells.Count < colIndex) cells.Add(CellValue.Empty);
-                cells.Add(ParseCell(cEl, sharedStrings, dateStyles));
+                cells.Add(ParseCell(cEl, sharedStrings, dateStyles, date1904));
             }
             rows.Add(cells);
         }
@@ -66,7 +67,10 @@ public static class XlsxReader
         return new SheetData(rows, name: null);
     }
 
-    private static CellValue ParseCell(XElement cEl, IReadOnlyList<string> sharedStrings, HashSet<int> dateStyles)
+    // Days between the 1904 epoch (1904-01-01) and the 1900 epoch that DateTime.FromOADate uses.
+    private const double Date1904Offset = 1462;
+
+    private static CellValue ParseCell(XElement cEl, IReadOnlyList<string> sharedStrings, HashSet<int> dateStyles, bool date1904)
     {
         var type = (string?)cEl.Attribute("t");
 
@@ -100,7 +104,8 @@ public static class XlsxReader
                     var styleAttr = (string?)cEl.Attribute("s");
                     if (styleAttr != null && int.TryParse(styleAttr, out var styleIdx) && dateStyles.Contains(styleIdx))
                     {
-                        try { return CellValue.OfDate(DateTime.FromOADate(num)); }
+                        var oaDate = date1904 ? num + Date1904Offset : num;
+                        try { return CellValue.OfDate(DateTime.FromOADate(oaDate)); }
                         catch { /* out-of-range serial: fall through to number */ }
                     }
                     return CellValue.OfNumber(num);
@@ -166,6 +171,21 @@ public static class XlsxReader
         }
 
         return dateStyleIndices;
+    }
+
+    /// <summary>
+    /// True if the workbook uses the 1904 date system (`&lt;workbookPr date1904="1"/&gt;` in
+    /// xl/workbook.xml). date1904 is xsd:boolean, so "1" and "true" both count.
+    /// </summary>
+    private static bool ReadDate1904(ZipArchive archive)
+    {
+        var entry = GetEntry(archive, "xl/workbook.xml");
+        if (entry is null) return false;
+
+        using var s = entry.Open();
+        var doc = XDocument.Load(s);
+        var attr = (string?)Descendants(doc.Root, "workbookPr").FirstOrDefault()?.Attribute("date1904");
+        return attr == "1" || string.Equals(attr, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool LooksLikeDate(string formatCode)
