@@ -30,12 +30,20 @@ public readonly record struct CellValue(CellKind Kind, string? Text, double? Num
     /// <summary>True for an empty cell or a text cell that is blank/whitespace.</summary>
     public bool IsBlank => Kind == CellKind.Empty || (Kind == CellKind.Text && string.IsNullOrWhiteSpace(Text));
 
-    /// <summary>Best-effort display string. Numbers use invariant culture; dates use ISO-8601 date.</summary>
+    /// <summary>
+    /// Best-effort display string. Numbers use invariant culture; a date with no time is
+    /// ISO-8601 date only, a date with a time (including a time-only cell, which decodes to a
+    /// datetime on the OLE epoch) is ISO-8601 date and time.
+    /// </summary>
     public string AsString() => Kind switch
     {
         CellKind.Text => Text ?? string.Empty,
         CellKind.Number => Number?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-        CellKind.Date => Date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty,
+        CellKind.Date => Date is { } d
+            ? (d.TimeOfDay == TimeSpan.Zero
+                ? d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                : d.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture))
+            : string.Empty,
         CellKind.Boolean => Boolean == true ? "TRUE" : "FALSE",
         _ => string.Empty
     };
