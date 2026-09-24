@@ -34,6 +34,10 @@ public static class XlsxReader
         var rows = new List<IReadOnlyList<CellValue>>();
         foreach (var rowEl in Descendants(doc.Root, "row"))
         {
+            var rowIndex = RowIndex((string?)rowEl.Attribute("r"));
+            // Pad any skipped rows with an empty row, same idea as the column padding below.
+            while (rowIndex >= 0 && rows.Count < rowIndex) rows.Add(Array.Empty<CellValue>());
+
             var cells = new List<CellValue>();
             foreach (var cEl in Elements(rowEl, "c"))
             {
@@ -216,6 +220,11 @@ public static class XlsxReader
 
     private static IEnumerable<XElement> Descendants(XElement? parent, string localName) =>
         parent?.Descendants().Where(e => e.Name.LocalName == localName) ?? Enumerable.Empty<XElement>();
+
+    /// <summary>Zero-based row index from a row's "r" attribute (1-based in the file). -1 if absent
+    /// or not a positive integer, in which case the row is appended at its current position.</summary>
+    private static int RowIndex(string? rowRef) =>
+        int.TryParse(rowRef, out var r) && r > 0 ? r - 1 : -1;
 
     /// <summary>Zero-based column index from a cell reference like "AB12" (=> 27). -1 if absent.</summary>
     public static int ColumnIndex(string? cellRef)
