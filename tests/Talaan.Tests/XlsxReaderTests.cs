@@ -99,6 +99,114 @@ public class XlsxReaderTests
     }
 
     [Fact]
+    public void Date1904_serial_reads_as_the_correct_date()
+    {
+        // The 1904 date system counts from 1904-01-01. Its serials are 1462 days behind the 1900
+        // system OADate uses, so writing the date as a 1904 serial without offsetting reads 1462
+        // days early.
+        var date = new DateTime(2024, 3, 15);
+        var serial = (date.ToOADate() - 1462).ToString(CultureInfo.InvariantCulture);
+
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row($"""<c r="A1" s="0"><v>{serial}</v></c>"""),
+            stylesXml: """
+                <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <cellXfs count="1"><xf numFmtId="14"/></cellXfs>
+                </styleSheet>
+                """,
+            workbookXml: Date1904WorkbookXml("1")));
+
+        Assert.Equal(CellKind.Date, sheet.At(0, 0).Kind);
+        Assert.Equal(date, sheet.At(0, 0).Date);
+    }
+
+    [Fact]
+    public void Date1904_true_attribute_reads_as_the_correct_date()
+    {
+        // date1904 is xsd:boolean, so "true" is as valid as "1".
+        var date = new DateTime(2024, 3, 15);
+        var serial = (date.ToOADate() - 1462).ToString(CultureInfo.InvariantCulture);
+
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row($"""<c r="A1" s="0"><v>{serial}</v></c>"""),
+            stylesXml: """
+                <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <cellXfs count="1"><xf numFmtId="14"/></cellXfs>
+                </styleSheet>
+                """,
+            workbookXml: Date1904WorkbookXml("true")));
+
+        Assert.Equal(CellKind.Date, sheet.At(0, 0).Kind);
+        Assert.Equal(date, sheet.At(0, 0).Date);
+    }
+
+    [Fact]
+    public void Date1904_explicit_zero_keeps_1900_behaviour()
+    {
+        var date = new DateTime(2024, 3, 15);
+        var serial = date.ToOADate().ToString(CultureInfo.InvariantCulture);
+
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row($"""<c r="A1" s="0"><v>{serial}</v></c>"""),
+            stylesXml: """
+                <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <cellXfs count="1"><xf numFmtId="14"/></cellXfs>
+                </styleSheet>
+                """,
+            workbookXml: Date1904WorkbookXml("0")));
+
+        Assert.Equal(CellKind.Date, sheet.At(0, 0).Kind);
+        Assert.Equal(date, sheet.At(0, 0).Date);
+    }
+
+    [Fact]
+    public void Date1904_absent_keeps_1900_behaviour()
+    {
+        var date = new DateTime(2024, 3, 15);
+        var serial = date.ToOADate().ToString(CultureInfo.InvariantCulture);
+
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row($"""<c r="A1" s="0"><v>{serial}</v></c>"""),
+            stylesXml: """
+                <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <cellXfs count="1"><xf numFmtId="14"/></cellXfs>
+                </styleSheet>
+                """,
+            workbookXml: Date1904WorkbookXml(date1904Attr: null)));
+
+        Assert.Equal(CellKind.Date, sheet.At(0, 0).Kind);
+        Assert.Equal(date, sheet.At(0, 0).Date);
+    }
+
+    [Fact]
+    public void Date1904_with_a_time_component_keeps_the_time()
+    {
+        var date = new DateTime(2024, 3, 15, 13, 45, 0);
+        var serial = (date.ToOADate() - 1462).ToString(CultureInfo.InvariantCulture);
+
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row($"""<c r="A1" s="0"><v>{serial}</v></c>"""),
+            stylesXml: """
+                <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <cellXfs count="1"><xf numFmtId="22"/></cellXfs>
+                </styleSheet>
+                """,
+            workbookXml: Date1904WorkbookXml("1")));
+
+        Assert.Equal(CellKind.Date, sheet.At(0, 0).Kind);
+        Assert.Equal(date, sheet.At(0, 0).Date);
+    }
+
+    /// <summary>A default single-sheet workbook, optionally with a `workbookPr date1904` attribute.</summary>
+    private static string Date1904WorkbookXml(string? date1904Attr) => $"""
+        <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          {(date1904Attr is null ? "" : $"""<workbookPr date1904="{date1904Attr}"/>""")}
+          <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+        </workbook>
+        """;
+
+    [Fact]
     public void First_sheet_resolves_through_workbook_rels_not_alphabetical_fallback()
     {
         // Two worksheet parts exist. "aaa_decoy.xml" sorts first alphabetically, so this only
