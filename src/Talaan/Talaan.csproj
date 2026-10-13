@@ -6,34 +6,29 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <PackageId>Talaan</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>BaryoDev</Authors>
     <Description>A zero-dependency spreadsheet and CSV reader and writer for .NET. Reads and writes .xlsx (OOXML) and CSV into a simple typed cell grid, no Interop, no ClosedXML, no OpenXML SDK.</Description>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
-    <PackageTags>xlsx;csv;spreadsheet;excel;parser;zero-dependency;import</PackageTags>
+    <PackageTags>xlsx;csv;tsv;spreadsheet;excel;parser;writer;zero-dependency;import;export</PackageTags>
 
     <PackageProjectUrl>https://github.com/BaryoDev/Talaan</PackageProjectUrl>
     <RepositoryUrl>https://github.com/BaryoDev/Talaan</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
 
-    <PackageReleaseNotes>0.2.0
-Behaviour changes:
-- An unterminated quoted field in CSV now throws InvalidDataException instead of reading to the end of the file.
-- Any malformed or DTD-bearing XML part in an .xlsx now throws InvalidDataException naming the part, with the XmlException as InnerException. Catch InvalidDataException for any bad file.
-- Cell references past column XFD and row numbers past 1048576 throw InvalidDataException.
-
-Fixes:
-- DTD processing is prohibited on every workbook XML part (entity expansion and external entities).
-- Rows missing from sheetData no longer shift later rows up.
-- Workbooks using the 1904 date system no longer read dates 1462 days early.
-- Phonetic runs (rPh) are no longer added to string text.
-- CsvReader.Read leaves the caller's stream open.
-- CellValue.AsString keeps the time for dates that have one.
-
+    <PackageReleaseNotes>0.3.0
 New:
-- Encoding overloads for CSV: CsvReader.Read(Stream, Encoding, char), Spreadsheet.Read(Stream, SpreadsheetFormat, Encoding) and Spreadsheet.ReadFile(string, Encoding).
-- The package links the repository and ships the readme, icon and symbols.</PackageReleaseNotes>
+- Spreadsheet.WriteXlsx(Stream, IEnumerable&lt;SheetData&gt;) writes every sheet to an .xlsx and leaves the stream open.
+- Spreadsheet.WriteFile(path, sheets) picks the format from the extension (.xlsx every sheet, .csv and .tsv the first sheet), writes a temp file and moves it into place.
+- CsvWriter.Write(Stream, SheetData, char delimiter) and CsvWriter.Write(Stream, IEnumerable&lt;SheetData&gt;) write RFC 4180 CSV or TSV as UTF-8 without a BOM.
+
+Writing rules:
+- Text is written as inline strings, so "00123" stays text. Numbers use invariant culture and round-trip. NaN and infinity throw.
+- Dates are serial numbers formatted yyyy-mm-dd, or yyyy-mm-dd hh:mm:ss when they have a time, and read back as dates. Dates before 1900-03-01 throw.
+- Invalid sheet names, an empty sheet list and cell text over 32767 characters throw ArgumentException, and nothing is written.
+- Characters XML 1.0 forbids are dropped from text and sheet names.
+- No styling, formulas, column widths or merged cells.</PackageReleaseNotes>
 
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
