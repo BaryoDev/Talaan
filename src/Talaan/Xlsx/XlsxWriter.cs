@@ -26,6 +26,7 @@ internal static class XlsxWriter
 
     private const int MaxRows = 1_048_576;
     private const int MaxColumns = 16_384;
+    private const int MaxTextLength = 32_767;
 
     private static readonly char[] ForbiddenNameChars = { '[', ']', ':', '*', '?', '/', '\\' };
 
@@ -49,6 +50,7 @@ internal static class XlsxWriter
             throw new ArgumentException("The sheet list contains a null sheet.", nameof(sheets));
 
         var names = ResolveNames(list);
+        Validate(list, names);
 
         using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
 
@@ -106,6 +108,52 @@ internal static class XlsxWriter
         }
     }
 
+    /// <summary>
+    /// Checks every sheet and cell before anything is written, so a rejection leaves the caller's
+    /// stream untouched.
+    /// </summary>
+    private static void Validate(List<SheetData> sheets, List<string> names)
+    {
+        for (var i = 0; i < sheets.Count; i++)
+        {
+            var sheet = sheets[i];
+            var name = names[i];
+            if (sheet.Rows.Count > MaxRows)
+                throw new ArgumentException($"Sheet '{name}' has {sheet.Rows.Count} rows. A sheet can have at most {MaxRows}.", "sheets");
+
+            for (var r = 0; r < sheet.Rows.Count; r++)
+            {
+                var row = sheet.Rows[r];
+                if (row.Count > MaxColumns)
+                    throw new ArgumentException($"Sheet '{name}' row {r + 1} has {row.Count} cells. A sheet can have at most {MaxColumns} columns (XFD).", "sheets");
+
+                for (var c = 0; c < row.Count; c++)
+                {
+                    var cell = row[c];
+                    var where = $"Sheet '{name}' cell {ColumnName(c)}{r + 1}";
+                    switch (cell.Kind)
+                    {
+                        case CellKind.Text:
+                            var len = StripIllegalXmlChars(cell.Text ?? string.Empty).Length;
+                            if (len > MaxTextLength)
+                                throw new ArgumentException($"{where} holds {len} characters. A cell can hold at most {MaxTextLength}.", "sheets");
+                            break;
+                        case CellKind.Number:
+                            var n = cell.Number ?? 0d;
+                            if (double.IsNaN(n) || double.IsInfinity(n))
+                                throw new ArgumentException($"{where} holds {n}, which a workbook cannot store.", "sheets");
+                            break;
+                        case CellKind.Date:
+                            var d = cell.Date ?? default;
+                            if (d < EarliestDate)
+                                throw new ArgumentException($"{where} holds {d:yyyy-MM-dd}. Dates before 1900-03-01 are not supported.", "sheets");
+                            break;
+                    }
+                }
+            }
+        }
+    }
+
     private static List<string> ResolveNames(List<SheetData> sheets)
     {
         var names = new List<string>(sheets.Count);
@@ -119,6 +167,13 @@ internal static class XlsxWriter
             if (name.Length > 31)
                 throw new ArgumentException(
                     $"Sheet name '{name}' is {name.Length} characters. Excel allows at most 31.", nameof(sheets));
+            var ctl = name.IndexOfAny(new[] { '\t', '\r', '\n' });
+            if (ctl >= 0)
+                throw new ArgumentException(
+                    $"Sheet name '{name}' contains a tab, CR or LF, which is not allowed.", nameof(sheets));
+            if (name.Equals("History", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException(
+                    "Sheet name 'History' is reserved by Excel (compared without regard to case).", nameof(sheets));
             var bad = name.IndexOfAny(ForbiddenNameChars);
             if (bad >= 0)
                 throw new ArgumentException(
@@ -137,17 +192,11 @@ internal static class XlsxWriter
 
     private static void WriteSheet(XmlWriter w, SheetData sheet)
     {
-        if (sheet.Rows.Count > MaxRows)
-            throw new ArgumentException($"A sheet can have at most {MaxRows} rows.", nameof(sheet));
-
         w.WriteStartElement("worksheet", MainNs);
         w.WriteStartElement("sheetData");
         for (var r = 0; r < sheet.Rows.Count; r++)
         {
             var row = sheet.Rows[r];
-            if (row.Count > MaxColumns)
-                throw new ArgumentException($"A sheet can have at most {MaxColumns} columns (XFD).", nameof(sheet));
-
             var rowOpen = false;
             for (var c = 0; c < row.Count; c++)
             {
@@ -192,8 +241,6 @@ internal static class XlsxWriter
             case CellKind.Number:
             {
                 var n = cell.Number ?? 0d;
-                if (double.IsNaN(n) || double.IsInfinity(n))
-                    throw new ArgumentException($"Cell {reference} holds {n}, which a workbook cannot store.");
                 w.WriteStartElement("c");
                 w.WriteAttributeString("r", reference);
                 w.WriteElementString("v", n.ToString("R", CultureInfo.InvariantCulture));
@@ -210,9 +257,6 @@ internal static class XlsxWriter
             case CellKind.Date:
             {
                 var d = cell.Date ?? default;
-                if (d < EarliestDate)
-                    throw new ArgumentException(
-                        $"Cell {reference} holds {d:yyyy-MM-dd}. Dates before 1900-03-01 are not supported.");
                 w.WriteStartElement("c");
                 w.WriteAttributeString("r", reference);
                 w.WriteAttributeString("s", (d.TimeOfDay == TimeSpan.Zero ? StyleDate : StyleDateTime).ToString(CultureInfo.InvariantCulture));

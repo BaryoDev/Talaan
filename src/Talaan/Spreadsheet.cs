@@ -97,16 +97,17 @@ public static class Spreadsheet
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="sheets"/> is null.</exception>
     /// <exception cref="ArgumentException">The list is empty, or a sheet name is longer than 31
-    /// characters, contains one of <c>[ ] : * ? / \</c>, starts or ends with an apostrophe, or repeats
+    /// characters, contains a tab, CR or LF or one of <c>[ ] : * ? / \</c>, starts or ends with an apostrophe,
+    /// is "History" (reserved by Excel), or repeats
     /// another name (compared without regard to case). Also thrown for a number that is NaN or
-    /// infinite, a date before 1900-03-01, or a sheet larger than 1048576 rows by 16384 columns.</exception>
+    /// infinite, a date before 1900-03-01, text over 32767 characters, or a sheet larger than 1048576 rows by 16384 columns.</exception>
     public static void WriteXlsx(Stream stream, IEnumerable<SheetData> sheets)
         => XlsxWriter.Write(stream, sheets);
 
     /// <summary>
     /// Writes a spreadsheet to disk, creating the file or overwriting it. The format comes from the
     /// extension: <c>.xlsx</c> writes every sheet, <c>.csv</c> and <c>.txt</c> (comma) and <c>.tsv</c>
-    /// (tab) write the first sheet only. Nothing is written to disk if the sheets are rejected.
+    /// (tab) write the first sheet only. The file is written to a temporary file beside the target and moved into place, so a rejection or failure leaves an existing file alone.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="sheets"/> is null.</exception>
     /// <exception cref="ArgumentException">The list is empty, or the sheets are rejected as described
@@ -131,7 +132,21 @@ public static class Spreadsheet
             case SpreadsheetFormat.Csv: CsvWriter.Write(buffer, list[0], ','); break;
             default: throw new NotSupportedException($"Unsupported spreadsheet format: {format}.");
         }
-        File.WriteAllBytes(path, buffer.ToArray());
+
+        // Write beside the target and move over it, so a failure never leaves a half-written file.
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        var tmp = Path.Combine(dir, "." + Path.GetRandomFileName() + ".tmp");
+        try
+        {
+            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write))
+                fs.Write(buffer.GetBuffer(), 0, (int)buffer.Length);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { /* best effort */ }
+            throw;
+        }
     }
 
     public static SpreadsheetFormat DetectFormat(string fileName)

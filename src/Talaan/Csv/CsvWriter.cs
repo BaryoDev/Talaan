@@ -23,24 +23,33 @@ public static class CsvWriter
         if (delimiter is '"' or '\r' or '\n')
             throw new ArgumentException("The delimiter cannot be a quote, CR or LF.", nameof(delimiter));
 
+        var special = new[] { delimiter, '"', '\r', '\n' };
         using var writer = new StreamWriter(stream, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true)
         {
             NewLine = "\r\n"
         };
         foreach (var row in sheet.Rows)
         {
-            for (var c = 0; c < row.Count; c++)
+            if (row.Count == 1 && row[0].AsString().Length == 0)
             {
-                if (c > 0) writer.Write(delimiter);
-                WriteField(writer, row[c].AsString(), delimiter);
+                // A bare blank line would read back as no row at all.
+                writer.Write("\"\"");
+            }
+            else
+            {
+                for (var c = 0; c < row.Count; c++)
+                {
+                    if (c > 0) writer.Write(delimiter);
+                    WriteField(writer, row[c].AsString(), special);
+                }
             }
             writer.WriteLine();
         }
     }
 
-    private static void WriteField(TextWriter writer, string value, char delimiter)
+    private static void WriteField(TextWriter writer, string value, char[] special)
     {
-        if (value.IndexOfAny(new[] { delimiter, '"', '\r', '\n' }) < 0)
+        if (value.IndexOfAny(special) < 0)
         {
             writer.Write(value);
             return;

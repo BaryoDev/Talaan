@@ -494,6 +494,84 @@ public class XlsxWriterTests
         Assert.Throws<ArgumentException>(() => Spreadsheet.WriteFile("a.csv", Array.Empty<SheetData>()));
     }
 
+
+    // ---- limits and atomicity ----
+
+    [Fact]
+    public void Text_of_32767_characters_is_accepted_and_32768_is_rejected()
+    {
+        var ok = RoundTrip(Grid(new[] { T(new string('x', 32767)) }));
+        Assert.Equal(32767, ok.At(0, 0).Text!.Length);
+
+        var ex = Assert.Throws<ArgumentException>(() => Write(Named("Big", new[] { T("a"), T(new string('x', 32768)) })));
+        Assert.Contains("Big", ex.Message);
+        Assert.Contains("B1", ex.Message);
+    }
+
+    [Fact]
+    public void Text_length_is_counted_after_illegal_characters_are_stripped()
+    {
+        var text = new string('x', 32767) + "\u0000\u0001";
+        Assert.Equal(32767, RoundTrip(Grid(new[] { T(text) })).At(0, 0).Text!.Length);
+    }
+
+    [Fact]
+    public void A_rejected_cell_writes_nothing_to_the_stream()
+    {
+        var bad = new CellValue[][]
+        {
+            new[] { T("fine") },
+            new[] { N(double.NaN) },
+        };
+        foreach (var sheets in new[]
+        {
+            new[] { Grid(new[] { T("ok") }), Grid(bad) },
+            new[] { Grid(new[] { T("ok") }), Grid(new[] { D(new DateTime(1800, 1, 1)) }) },
+            new[] { Grid(new[] { T("ok") }), Grid(new[] { T(new string('x', 40000)) }) },
+            new[] { Grid(new[] { T("ok") }), Grid(new CellValue[16385]) },
+            new[] { Grid(new[] { T("ok") }), Named("History", new[] { T("x") }) },
+        })
+        {
+            var ms = new MemoryStream();
+            Assert.Throws<ArgumentException>(() => Spreadsheet.WriteXlsx(ms, sheets));
+            Assert.Equal(0, ms.Length);
+        }
+    }
+
+    [Theory]
+    [InlineData("History")]
+    [InlineData("history")]
+    [InlineData("HISTORY")]
+    [InlineData("a\tb")]
+    [InlineData("a\rb")]
+    [InlineData("a\nb")]
+    public void Reserved_and_whitespace_control_names_are_rejected(string name)
+    {
+        Assert.Throws<ArgumentException>(() => Write(Named(name, new[] { T("x") })));
+    }
+
+    [Fact]
+    public void Name_containing_history_as_a_substring_is_fine()
+    {
+        Assert.Equal(new[] { "History of X" }, SheetNames(Write(Named("History of X", new[] { T("x") }))));
+    }
+
+    [Fact]
+    public void WriteFile_leaves_no_temp_file_behind()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "out.xlsx");
+            Spreadsheet.WriteFile(path, new[] { Grid(new[] { T("x") }) });
+            Assert.Equal(new[] { path }, Directory.GetFileSystemEntries(dir));
+            Assert.Throws<ArgumentException>(() => Spreadsheet.WriteFile(path, new[] { Named("History", new[] { T("x") }) }));
+            Assert.Equal(new[] { path }, Directory.GetFileSystemEntries(dir));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
     internal static string TempPath(string ext) => Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ext);
 
     private sealed class ForwardOnlyStream(Stream inner) : Stream

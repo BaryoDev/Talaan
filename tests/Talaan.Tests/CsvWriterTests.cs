@@ -71,6 +71,33 @@ public class CsvWriterTests
             Assert.Throws<ArgumentException>(() => CsvWriter.Write(new MemoryStream(), Grid(), d));
     }
 
+
+    [Fact]
+    public void Single_column_row_with_an_empty_cell_is_written_as_empty_quotes_and_reads_back()
+    {
+        var sheet = Grid(new[] { T("a") }, new[] { CellValue.Empty }, new[] { T("c") });
+        Assert.Equal("a\r\n\"\"\r\nc\r\n", Csv(sheet));
+        var ms = new MemoryStream();
+        CsvWriter.Write(ms, sheet);
+        ms.Position = 0;
+        var back = CsvReader.Read(ms);
+        Assert.Equal(3, back.RowCount);
+        Assert.Equal(CellKind.Empty, back.At(1, 0).Kind);
+        Assert.Equal("c", back.At(2, 0).Text);
+    }
+
+    [Fact]
+    public void Multi_column_rows_of_empty_cells_are_not_quoted()
+    {
+        Assert.Equal(",\r\n", Csv(Grid(new[] { CellValue.Empty, CellValue.Empty })));
+    }
+
+    [Fact]
+    public void Text_starting_with_formula_characters_is_written_as_is()
+    {
+        Assert.Equal("=1+1,+2,-3,@x\r\n", Csv(Grid(new[] { T("=1+1"), T("+2"), T("-3"), T("@x") })));
+    }
+
     [Fact]
     public void Csv_round_trips_through_the_reader()
     {
