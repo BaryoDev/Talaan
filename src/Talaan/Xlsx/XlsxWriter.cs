@@ -223,30 +223,30 @@ internal static class XlsxWriter
         switch (cell.Kind)
         {
             case CellKind.Text:
-            {
-                var text = StripIllegalXmlChars(cell.Text!);
-                if (text.Length == 0) return;
-                w.WriteStartElement("c");
-                w.WriteAttributeString("r", reference);
-                w.WriteAttributeString("t", "inlineStr");
-                w.WriteStartElement("is");
-                w.WriteStartElement("t");
-                w.WriteAttributeString("xml", "space", null, "preserve");
-                w.WriteString(text);
-                w.WriteEndElement();
-                w.WriteEndElement();
-                w.WriteEndElement();
-                break;
-            }
+                {
+                    var text = StripIllegalXmlChars(cell.Text!);
+                    if (text.Length == 0) return;
+                    w.WriteStartElement("c");
+                    w.WriteAttributeString("r", reference);
+                    w.WriteAttributeString("t", "inlineStr");
+                    w.WriteStartElement("is");
+                    w.WriteStartElement("t");
+                    w.WriteAttributeString("xml", "space", null, "preserve");
+                    w.WriteString(text);
+                    w.WriteEndElement();
+                    w.WriteEndElement();
+                    w.WriteEndElement();
+                    break;
+                }
             case CellKind.Number:
-            {
-                var n = cell.Number ?? 0d;
-                w.WriteStartElement("c");
-                w.WriteAttributeString("r", reference);
-                w.WriteElementString("v", n.ToString("R", CultureInfo.InvariantCulture));
-                w.WriteEndElement();
-                break;
-            }
+                {
+                    var n = cell.Number ?? 0d;
+                    w.WriteStartElement("c");
+                    w.WriteAttributeString("r", reference);
+                    w.WriteElementString("v", n.ToString("R", CultureInfo.InvariantCulture));
+                    w.WriteEndElement();
+                    break;
+                }
             case CellKind.Boolean:
                 w.WriteStartElement("c");
                 w.WriteAttributeString("r", reference);
@@ -255,15 +255,15 @@ internal static class XlsxWriter
                 w.WriteEndElement();
                 break;
             case CellKind.Date:
-            {
-                var d = cell.Date ?? default;
-                w.WriteStartElement("c");
-                w.WriteAttributeString("r", reference);
-                w.WriteAttributeString("s", (d.TimeOfDay == TimeSpan.Zero ? StyleDate : StyleDateTime).ToString(CultureInfo.InvariantCulture));
-                w.WriteElementString("v", d.ToOADate().ToString("R", CultureInfo.InvariantCulture));
-                w.WriteEndElement();
-                break;
-            }
+                {
+                    var d = cell.Date ?? default;
+                    w.WriteStartElement("c");
+                    w.WriteAttributeString("r", reference);
+                    w.WriteAttributeString("s", (d.TimeOfDay == TimeSpan.Zero ? StyleDate : StyleDateTime).ToString(CultureInfo.InvariantCulture));
+                    w.WriteElementString("v", d.ToOADate().ToString("R", CultureInfo.InvariantCulture));
+                    w.WriteEndElement();
+                    break;
+                }
         }
     }
 
