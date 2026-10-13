@@ -94,9 +94,14 @@ var people = new SheetData(new IReadOnlyList<CellValue>[]
     new[] { CellValue.OfText("name"), CellValue.OfText("joined"), CellValue.OfText("active") },
     new[] { CellValue.OfText("Ana"), CellValue.OfDate(new DateTime(2024, 5, 6)), CellValue.OfBoolean(true) },
 }, name: "People");
+var archive = new SheetData(new IReadOnlyList<CellValue>[]
+{
+    new[] { CellValue.OfText("name"), CellValue.OfNumber(42) },
+}, name: "Archive");
+using var responseStream = new MemoryStream();
 
 // To a file. The extension picks the format and an existing file is overwritten.
-Spreadsheet.WriteFile("members.xlsx", new[] { people, otherSheet });  // every sheet
+Spreadsheet.WriteFile("members.xlsx", new[] { people, archive });  // every sheet
 Spreadsheet.WriteFile("members.csv", new[] { people });               // first sheet only
 Spreadsheet.WriteFile("members.tsv", new[] { people });               // first sheet only, tab-delimited
 
@@ -114,11 +119,21 @@ CsvWriter.Write(responseStream, people, delimiter: ',');             // Talaan.C
 - **Characters XML 1.0 forbids** (most control characters, lone surrogates) are dropped from text
   and sheet names.
 - **Sheet names**: a null or blank name becomes `Sheet{N}` (its 1-based position). A name over 31
-  characters, containing any of `[ ] : * ? / \`, starting or ending with an apostrophe, or repeating
-  another name (case-insensitive) throws `ArgumentException`. An empty sheet list also throws.
+  characters, containing any of `[ ] : * ? / \`, starting or ending with an apostrophe, containing a tab, CR or LF, named `History` (Excel reserves
+  it), or repeating another name (case-insensitive) throws `ArgumentException`. An empty sheet list also throws.
 - **CSV and TSV** follow RFC 4180: a field is quoted when it holds the delimiter, a quote, CR or
-  LF, and inner quotes are doubled. Rows end with CRLF. UTF-8, no byte-order mark. Cells are written
-  with `AsString()`.
+  LF, and inner quotes are doubled. Rows end with CRLF. Cells are written with `AsString()`. A row
+  with one empty cell is written as `""` so it is not a blank line.
+- **CSV encoding** is UTF-8 without a byte-order mark. Excel on Windows opens a BOM-less CSV in the
+  system code page, so non-ASCII text can show up garbled. Import it with "From Text/CSV" and pick
+  UTF-8, or write the file yourself with a BOM.
+- **Formulas.** Text starting with `=`, `+`, `-` or `@` is written as is. A CSV opened in Excel
+  treats it as a formula, so escape or reject that text first if the data is untrusted. In `.xlsx`
+  it is stored as a string and is not evaluated.
+- **Extreme numbers.** Values outside Excel's double range (denormals such as `double.Epsilon`) are
+  written as given, and Excel may read them as 0.
+- **Limits.** Text over 32767 characters in a cell throws. Nothing is written to a stream when any
+  sheet or cell is rejected, and `WriteFile` writes a temp file then moves it into place.
 
 ## Design notes
 
