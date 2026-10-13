@@ -6,7 +6,8 @@ using Talaan.Xlsx;
 namespace Talaan;
 
 /// <summary>
-/// Entry point for reading a spreadsheet into a <see cref="SheetData"/> grid. Dispatches by file
+/// Entry point for reading a spreadsheet into a <see cref="SheetData"/> grid, and for writing
+/// sheets back out as .xlsx, .csv or .tsv. Dispatches by file
 /// extension (or an explicit <see cref="SpreadsheetFormat"/>): .xlsx via <see cref="XlsxReader"/>,
 /// .csv/.tsv/.txt via <see cref="CsvReader"/>.
 /// </summary>
@@ -80,6 +81,57 @@ public static class Spreadsheet
     {
         using var fs = File.OpenRead(path);
         return Read(fs, DetectFormat(path), encoding);
+    }
+
+    /// <summary>
+    /// Writes <paramref name="sheets"/> as an .xlsx workbook, one worksheet per sheet in order. The
+    /// stream is left open. Text is written as inline strings, booleans and numbers as typed cells,
+    /// and dates as serial numbers styled <c>yyyy-mm-dd</c> (or <c>yyyy-mm-dd hh:mm:ss</c> when the
+    /// value has a time), so <see cref="Read(Stream, SpreadsheetFormat)"/> reads them back as
+    /// <see cref="CellKind.Date"/>. Empty cells are skipped. Characters XML 1.0 does not allow are
+    /// dropped from text and sheet names.
+    /// <para>
+    /// A sheet with a null or blank <see cref="SheetData.Name"/> is named <c>Sheet{N}</c>, where N is
+    /// its 1-based position.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="sheets"/> is null.</exception>
+    /// <exception cref="ArgumentException">The list is empty, or a sheet name is longer than 31
+    /// characters, contains one of <c>[ ] : * ? / \</c>, starts or ends with an apostrophe, or repeats
+    /// another name (compared without regard to case). Also thrown for a number that is NaN or
+    /// infinite, a date before 1900-03-01, or a sheet larger than 1048576 rows by 16384 columns.</exception>
+    public static void WriteXlsx(Stream stream, IEnumerable<SheetData> sheets)
+        => XlsxWriter.Write(stream, sheets);
+
+    /// <summary>
+    /// Writes a spreadsheet to disk, creating the file or overwriting it. The format comes from the
+    /// extension: <c>.xlsx</c> writes every sheet, <c>.csv</c> and <c>.txt</c> (comma) and <c>.tsv</c>
+    /// (tab) write the first sheet only. Nothing is written to disk if the sheets are rejected.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="sheets"/> is null.</exception>
+    /// <exception cref="ArgumentException">The list is empty, or the sheets are rejected as described
+    /// on <see cref="WriteXlsx(Stream, IEnumerable{SheetData})"/>.</exception>
+    /// <exception cref="NotSupportedException">The extension is not .xlsx, .csv, .txt or .tsv.</exception>
+    public static void WriteFile(string path, IEnumerable<SheetData> sheets)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(sheets);
+        var format = DetectFormat(path);
+        var list = sheets.ToList();
+        if (list.Count == 0)
+            throw new ArgumentException("At least one sheet is required.", nameof(sheets));
+        if (list[0] is null)
+            throw new ArgumentException("The sheet list contains a null sheet.", nameof(sheets));
+
+        using var buffer = new MemoryStream();
+        switch (format)
+        {
+            case SpreadsheetFormat.Xlsx: WriteXlsx(buffer, list); break;
+            case SpreadsheetFormat.Tsv: CsvWriter.Write(buffer, list[0], '\t'); break;
+            case SpreadsheetFormat.Csv: CsvWriter.Write(buffer, list[0], ','); break;
+            default: throw new NotSupportedException($"Unsupported spreadsheet format: {format}.");
+        }
+        File.WriteAllBytes(path, buffer.ToArray());
     }
 
     public static SpreadsheetFormat DetectFormat(string fileName)
