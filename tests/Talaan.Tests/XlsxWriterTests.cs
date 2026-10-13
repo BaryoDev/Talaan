@@ -572,6 +572,22 @@ public class XlsxWriterTests
         finally { Directory.Delete(dir, true); }
     }
 
+    [Fact]
+    public void WriteFile_keeps_the_mode_of_an_existing_file()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var path = TempPath(".xlsx");
+        try
+        {
+            File.WriteAllText(path, "old");
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            Spreadsheet.WriteFile(path, new[] { Grid(new[] { T("x") }) });
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+            Assert.Equal("x", Spreadsheet.ReadFile(path).At(0, 0).Text);
+        }
+        finally { File.Delete(path); }
+    }
+
     internal static string TempPath(string ext) => Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ext);
 
     private sealed class ForwardOnlyStream(Stream inner) : Stream

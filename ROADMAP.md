@@ -49,25 +49,19 @@ Effort: small. One new type + a loop around existing parsing.
 
 ---
 
-## v0.3.0 — Write CSV, TSV and XLSX (done)
+## v0.3.0: Write CSV, TSV and XLSX (done)
 
 Add writers: CSV and TSV (mirror of the RFC-4180 reader) and XLSX.
 
-Shipped in 0.3.0: `Spreadsheet.WriteXlsx`, `Spreadsheet.WriteFile` and `CsvWriter.Write(Stream, SheetData, char)`.
-Not built: the `TextWriter` overloads, `Spreadsheet.WriteCsv`, `ToCsv()` and the rows-of-objects overload below.
-
-**New API (additive):**
+**Built (additive):**
 ```csharp
-CsvWriter.Write(SheetData sheet, TextWriter writer, char delimiter = ',');
-CsvWriter.Write(SheetData sheet, Stream stream, char delimiter = ',');
-Spreadsheet.WriteCsv(SheetData sheet, string path);
-string csv = sheet.ToCsv();                 // convenience extension
+CsvWriter.Write(Stream stream, SheetData sheet, char delimiter = ',');
+Spreadsheet.WriteXlsx(Stream stream, IEnumerable<SheetData> sheets);
+Spreadsheet.WriteFile(string path, IEnumerable<SheetData> sheets);   // .xlsx, .csv, .txt, .tsv
 ```
 
-**Also write from arbitrary rows** (not just a round-tripped `SheetData`):
-```csharp
-CsvWriter.Write(IEnumerable<IEnumerable<object?>> rows, TextWriter writer, char delimiter = ',');
-```
+**Not built:** `CsvWriter.Write(SheetData, TextWriter, char)`, `Spreadsheet.WriteCsv(SheetData, string)`,
+`sheet.ToCsv()`, and writing from arbitrary rows (`IEnumerable<IEnumerable<object?>>`).
 
 **Correctness (the whole point):**
 - Quote a field when it contains the delimiter, `"`, `\r`, or `\n`; escape `"` as `""`.
@@ -83,16 +77,15 @@ Effort: small. A focused state-free writer + a couple of convenience overloads.
 
 - **v0.4.0 — Header-aware records.** `sheet.AsRecords(headerRow: 0)` → `IEnumerable<IReadOnlyDictionary<string, CellValue>>`, keyed by header. Optional `MapTo<T>()` by property-name match. Turns the raw grid into typed data (useful for the BaryoClub import flow).
 - **v0.5.0 — Streaming reads.** `XlsxReader.ReadRows(stream)` / `CsvReader.ReadRows(...)` returning `IEnumerable<IReadOnlyList<CellValue>>` so large files don't load fully into memory. Additive; the current eager `Read` stays.
-- ~~TSV / custom-delimiter write~~ — done in 0.3.0.
-- ~~XLSX writing~~ — done in 0.3.0, with `XlsxWriter` kept internal behind `Spreadsheet.WriteXlsx`.
+- ~~TSV / custom-delimiter write~~ (done in 0.3.0).
+- ~~XLSX writing~~ (done in 0.3.0, with `XlsxWriter` kept internal behind `Spreadsheet.WriteXlsx`).
 
 ---
 
 ## Sequencing
 
 1. **v0.2.0** multi-sheet read — highest value, smallest change, reuses existing parsing.
-2. **v0.3.0** CSV, TSV and XLSX write (done) — small, self-contained, and unlocks read-xlsx → write-csv pipelines.
+2. **v0.3.0** CSV, TSV and XLSX write (done). Small, self-contained, and it unlocks read xlsx then write csv pipelines.
 3. Header records / streaming as real use cases appear.
-4. XLSX write only if demanded.
 
 Each ships via the existing `Publish to NuGet` workflow with a bumped `Version`.

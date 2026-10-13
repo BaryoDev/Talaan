@@ -108,6 +108,8 @@ public static class Spreadsheet
     /// Writes a spreadsheet to disk, creating the file or overwriting it. The format comes from the
     /// extension: <c>.xlsx</c> writes every sheet, <c>.csv</c> and <c>.txt</c> (comma) and <c>.tsv</c>
     /// (tab) write the first sheet only. The file is written to a temporary file beside the target and moved into place, so a rejection or failure leaves an existing file alone.
+    /// The target is replaced, not written through, so a symlink at the path is replaced too. On Unix the
+    /// existing file's mode is kept.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="sheets"/> is null.</exception>
     /// <exception cref="ArgumentException">The list is empty, or the sheets are rejected as described
@@ -140,6 +142,8 @@ public static class Spreadsheet
         {
             using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write))
                 fs.Write(buffer.GetBuffer(), 0, (int)buffer.Length);
+            if (!OperatingSystem.IsWindows() && File.Exists(path))
+                File.SetUnixFileMode(tmp, File.GetUnixFileMode(path));
             File.Move(tmp, path, overwrite: true);
         }
         catch
