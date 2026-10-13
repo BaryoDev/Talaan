@@ -68,7 +68,8 @@ phonetic guides (`<rPh>`), which are also `<t>` elements. Known bug, open issue.
 whatever Excel last wrote. A file saved by a tool that does not write cached values reads as empty,
 and that is expected.
 
-**Talaan does not write.** Not to `.xlsx`, and not yet to CSV (a CSV writer is `ROADMAP.md` v0.3.0).
+**Writing is plain.** `.xlsx` output carries values and two date formats only: no styling, formulas,
+column widths or merged cells. Keep it that way unless the roadmap says otherwise.
 
 ## Fixtures live in memory, not in the repository
 
