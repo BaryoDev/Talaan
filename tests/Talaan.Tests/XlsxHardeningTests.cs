@@ -81,7 +81,30 @@ public class XlsxHardeningTests
     [InlineData("../../../etc/passwd")]
     public void Relationship_target_escaping_the_package_is_rejected(string target)
     {
-        Assert.Throws<InvalidDataException>(() => XlsxReader.Read(WithTarget(target)));
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(WithTarget(target)));
+        Assert.Contains("escapes the package", ex.Message);
+    }
+
+    [Fact]
+    public void External_relationship_is_not_resolved_as_a_package_part()
+    {
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(
+            sheetXml: XlsxBuilder.Row("""<c r="A1" t="inlineStr"><is><t>found</t></is></c>"""),
+            workbookRelsXml: """
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="../../x.xml" TargetMode="External"/>
+                </Relationships>
+                """));
+
+        Assert.Equal("found", sheet.At(0, 0).Text);
+    }
+
+    [Fact]
+    public void Part_at_the_limit_reads_and_one_deeper_is_rejected()
+    {
+        // worksheet and sheetData take two levels, so 254 x elements put the deepest at depth 255.
+        Assert.Equal(0, XlsxReader.Read(XlsxBuilder.Build(sheetXml: NestedSheet(254))).Rows.Count);
+        Assert.Throws<InvalidDataException>(() => XlsxReader.Read(XlsxBuilder.Build(sheetXml: NestedSheet(255))));
     }
 
     [Theory]

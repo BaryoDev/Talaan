@@ -62,7 +62,7 @@ public static class XlsxReader
         XContainer current = doc;
         while (reader.Read())
         {
-            if (reader.Depth > MaxXmlDepth)
+            if (reader.Depth >= MaxXmlDepth)
                 throw new InvalidDataException($"{partName} nests XML deeper than {MaxXmlDepth} levels.");
 
             switch (reader.NodeType)
@@ -335,7 +335,8 @@ public static class XlsxReader
                     using var relStream = rels.Open();
                     var relDoc = LoadPart(relStream, "xl/_rels/workbook.xml.rels");
                     var target = Descendants(relDoc.Root, "Relationship")
-                        .FirstOrDefault(r => (string?)r.Attribute("Id") == rid)?
+                        .FirstOrDefault(r => (string?)r.Attribute("Id") == rid
+                            && !string.Equals((string?)r.Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))?
                         .Attribute("Target")?.Value;
                     if (!string.IsNullOrEmpty(target))
                         return NormalizeTarget(target!);

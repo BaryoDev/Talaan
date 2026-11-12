@@ -17,7 +17,7 @@
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
 
-    <PackageReleaseNotes>Unreleased
+    <PackageReleaseNotes>Next release (notes added after 0.3.0 shipped)
 - Correction: the 0.3.0 note below listed CsvWriter.Write(Stream, IEnumerable&lt;SheetData&gt;). That overload does not exist. CsvWriter only has Write(Stream, SheetData, char delimiter).
 - Reading an .xlsx part nested deeper than 256 levels, a non-numeric numFmtId, or a relationship target that climbs above the package root throws InvalidDataException.
 - Relationship targets such as ../xl/worksheets/sheet1.xml now resolve.
