@@ -42,11 +42,9 @@ public static class Spreadsheet
     /// interacts with <paramref name="encoding"/>, and for the Windows code page note.
     /// </summary>
     /// <exception cref="InvalidDataException">The stream is not a valid file of
-    /// <paramref name="format"/> (not a valid zip for .xlsx, or an unterminated quoted field for
-    /// CSV/TSV).</exception>
-    /// <exception cref="XmlException">The format is <see cref="SpreadsheetFormat.Xlsx"/> and a
-    /// part is not well-formed XML, or carries a DOCTYPE. DTDs are never processed; this is not
-    /// wrapped in a different exception type.</exception>
+    /// <paramref name="format"/> (not a valid zip for .xlsx, a part that is not well-formed XML or
+    /// carries a DOCTYPE, in which case <see cref="Exception.InnerException"/> is the original
+    /// <see cref="XmlException"/>, or an unterminated quoted field for CSV/TSV).</exception>
     public static SheetData Read(Stream stream, SpreadsheetFormat format, Encoding encoding) => format switch
     {
         SpreadsheetFormat.Xlsx => XlsxReader.Read(stream),
@@ -73,10 +71,9 @@ public static class Spreadsheet
     /// mark behavior and the Windows code page note.
     /// </summary>
     /// <exception cref="InvalidDataException">The file is not a valid file of the detected format
-    /// (not a valid zip for .xlsx, or an unterminated quoted field for CSV/TSV).</exception>
-    /// <exception cref="XmlException">The file is .xlsx and a part is not well-formed XML, or
-    /// carries a DOCTYPE. DTDs are never processed; this is not wrapped in a different exception
-    /// type.</exception>
+    /// (not a valid zip for .xlsx, a part that is not well-formed XML or carries a DOCTYPE, in which
+    /// case <see cref="Exception.InnerException"/> is the original <see cref="XmlException"/>, or an
+    /// unterminated quoted field for CSV/TSV).</exception>
     public static SheetData ReadFile(string path, Encoding encoding)
     {
         using var fs = File.OpenRead(path);

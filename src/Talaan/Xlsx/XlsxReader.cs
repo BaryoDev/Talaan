@@ -42,12 +42,60 @@ public static class XlsxReader
         try
         {
             using var reader = XmlReader.Create(stream, PartReaderSettings);
-            return XDocument.Load(reader);
+            return LoadGuarded(reader, partName);
         }
         catch (XmlException ex)
         {
             throw new InvalidDataException($"{partName} is not valid XML: {ex.Message}", ex);
         }
+    }
+
+    // Real worksheets nest a handful of levels. XmlReader has no depth limit and loading a very
+    // deep part is super-linear, so a tiny hostile part could pin a CPU. Deeper than this is not
+    // a workbook Excel wrote.
+    private const int MaxXmlDepth = 256;
+
+    // Builds the tree node by node so the depth check runs before a deep part is ever loaded.
+    private static XDocument LoadGuarded(XmlReader reader, string partName)
+    {
+        var doc = new XDocument();
+        XContainer current = doc;
+        while (reader.Read())
+        {
+            if (reader.Depth > MaxXmlDepth)
+                throw new InvalidDataException($"{partName} nests XML deeper than {MaxXmlDepth} levels.");
+
+            switch (reader.NodeType)
+            {
+                case XmlNodeType.Element:
+                    var el = new XElement(XName.Get(reader.LocalName, reader.NamespaceURI));
+                    var empty = reader.IsEmptyElement;
+                    if (reader.MoveToFirstAttribute())
+                    {
+                        do
+                        {
+                            if (reader.NamespaceURI == "http://www.w3.org/2000/xmlns/") continue;
+                            el.Add(new XAttribute(XName.Get(reader.LocalName, reader.NamespaceURI), reader.Value));
+                        } while (reader.MoveToNextAttribute());
+                        reader.MoveToElement();
+                    }
+                    current.Add(el);
+                    if (!empty) current = el;
+                    break;
+                case XmlNodeType.EndElement:
+                    current = current.Parent ?? (XContainer)doc;
+                    break;
+                case XmlNodeType.Text:
+                case XmlNodeType.SignificantWhitespace:
+                case XmlNodeType.Whitespace:
+                    if (current is XElement) current.Add(new XText(reader.Value));
+                    break;
+                case XmlNodeType.CDATA:
+                    current.Add(new XCData(reader.Value));
+                    break;
+            }
+        }
+        return doc;
     }
 
     // Excel's row limit (2^20). A row reference above this can't be a real file, and letting it
@@ -128,8 +176,11 @@ public static class XlsxReader
             case "e": // error
                 return CellValue.OfText(raw);
             default: // number — possibly a date depending on the cell's style
-                if (double.TryParse(raw, System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out var num))
+                // xlsx stores plain invariant numbers: no thousands separators, no currency. NaN and
+                // infinity are not numbers a worksheet holds, so they stay text.
+                if (double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var num)
+                    && double.IsFinite(num))
                 {
                     var styleAttr = (string?)cEl.Attribute("s");
                     if (styleAttr != null && int.TryParse(styleAttr, out var styleIdx) && dateStyles.Contains(styleIdx))
@@ -195,7 +246,7 @@ public static class XlsxReader
         {
             foreach (var fmt in Elements(numFmtsEl, "numFmt"))
             {
-                var id = (int?)fmt.Attribute("numFmtId");
+                var id = IntAttribute(fmt, "numFmtId", "xl/styles.xml");
                 var code = (string?)fmt.Attribute("formatCode");
                 if (id is int fid && code != null && LooksLikeDate(code))
                     dateFormatIds.Add(fid);
@@ -209,7 +260,7 @@ public static class XlsxReader
             var index = 0;
             foreach (var xf in Elements(cellXfs, "xf"))
             {
-                var numFmtId = (int?)xf.Attribute("numFmtId") ?? 0;
+                var numFmtId = IntAttribute(xf, "numFmtId", "xl/styles.xml") ?? 0;
                 if (dateFormatIds.Contains(numFmtId))
                     dateStyleIndices.Add(index);
                 index++;
@@ -232,6 +283,18 @@ public static class XlsxReader
         var doc = LoadPart(s, "xl/workbook.xml");
         var attr = (string?)Descendants(doc.Root, "workbookPr").FirstOrDefault()?.Attribute("date1904");
         return attr == "1" || string.Equals(attr, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>An integer attribute, or null if absent. A value that is not an integer is a
+    /// malformed part, so it throws <see cref="InvalidDataException"/> like any other.</summary>
+    private static int? IntAttribute(XElement el, string name, string partName)
+    {
+        var raw = (string?)el.Attribute(name);
+        if (raw is null) return null;
+        if (!int.TryParse(raw, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out var value))
+            throw new InvalidDataException($"{partName} has a non-numeric {name}: '{raw}'.");
+        return value;
     }
 
     private static bool LooksLikeDate(string formatCode)
@@ -275,14 +338,14 @@ public static class XlsxReader
                         .FirstOrDefault(r => (string?)r.Attribute("Id") == rid)?
                         .Attribute("Target")?.Value;
                     if (!string.IsNullOrEmpty(target))
-                        return target!.StartsWith("/") ? target!.TrimStart('/') : "xl/" + target;
+                        return NormalizeTarget(target!);
                 }
             }
             // Only fall back on a benign lookup failure (a missing rel, an unexpected shape).
-            // A DOCTYPE or malformed part is rejected by LoadPart as InvalidDataException wrapping
-            // an XmlException, and must not be swallowed into a silent fallback that reads a
+            // A DOCTYPE, a too-deep part or a malformed part is rejected as InvalidDataException
+            // (by LoadPart, or by NormalizeTarget for a target outside the package), and must not be swallowed into a silent fallback that reads a
             // different worksheet than the caller asked for.
-            catch (Exception e) when (e is not InvalidDataException { InnerException: XmlException })
+            catch (Exception e) when (e is not InvalidDataException)
             {
                 /* fall through to convention */
             }
@@ -295,6 +358,27 @@ public static class XlsxReader
             .OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         return sheet?.FullName ?? "xl/worksheets/sheet1.xml";
+    }
+
+    /// <summary>Resolves a relationship target to a package path: absolute targets are taken from
+    /// the root, relative ones from xl/, and . and .. segments are collapsed. A target that climbs
+    /// above the package root throws <see cref="InvalidDataException"/>.</summary>
+    private static string NormalizeTarget(string target)
+    {
+        var parts = new List<string>();
+        var raw = target.StartsWith('/') ? target : "xl/" + target;
+        foreach (var seg in raw.Split('/'))
+        {
+            if (seg.Length == 0 || seg == ".") continue;
+            if (seg == "..")
+            {
+                if (parts.Count == 0)
+                    throw new InvalidDataException($"Relationship target '{target}' escapes the package root.");
+                parts.RemoveAt(parts.Count - 1);
+            }
+            else parts.Add(seg);
+        }
+        return string.Join('/', parts);
     }
 
     // ---- helpers ---------------------------------------------------------
