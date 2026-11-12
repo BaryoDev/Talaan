@@ -103,7 +103,7 @@ public class XlsxHardeningTests
     public void Part_at_the_limit_reads_and_one_deeper_is_rejected()
     {
         // worksheet and sheetData take two levels, so 254 x elements put the deepest at depth 255.
-        Assert.Equal(0, XlsxReader.Read(XlsxBuilder.Build(sheetXml: NestedSheet(254))).Rows.Count);
+        Assert.Empty(XlsxReader.Read(XlsxBuilder.Build(sheetXml: NestedSheet(254))).Rows);
         Assert.Throws<InvalidDataException>(() => XlsxReader.Read(XlsxBuilder.Build(sheetXml: NestedSheet(255))));
     }
 
