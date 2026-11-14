@@ -8,12 +8,17 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Lets the runner mint the OIDC token nuget.org exchanges for a short-lived key.
+      id-token: write
     env:
       VERSION: ${{ github.event.inputs.version }}
     steps:
@@ -47,15 +52,22 @@ jobs:
       - name: Pack
         run: dotnet pack src/Talaan/Talaan.csproj --configuration Release --no-build --output ./nupkgs /p:Version="$VERSION"
 
-      - name: Check for NuGet API key
-        run: |
-          if [ -z "${{ secrets.NUGET_API_KEY }}" ]; then
-            echo "::error::NUGET_API_KEY secret is not set (org or repo)."
-            exit 1
-          fi
+      # Trusted publishing: no long-lived key. Runs after tests so a failed test never asks for a token.
+      - name: Exchange OIDC token for a short-lived NuGet key
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER || 'arnelirobles' }}
 
       - name: Publish
-        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        env:
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::No API key returned. Check the trusted publishing policy on nuget.org."
+            exit 1
+          fi
+          dotnet nuget push ./nupkgs/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Tag release
         run: |
