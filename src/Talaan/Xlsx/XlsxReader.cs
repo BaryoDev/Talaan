@@ -107,8 +107,18 @@ public static class XlsxReader
     /// worksheet itself) is missing, or a part is not well-formed XML or carries a DOCTYPE. DTDs are
     /// never processed. For an XML problem the message names the part and
     /// <see cref="Exception.InnerException"/> is the original <see cref="XmlException"/>.</exception>
-    public static SheetData Read(Stream stream)
+    public static SheetData Read(Stream stream) => Read(stream, null);
+
+    /// <summary>
+    /// Reads the first worksheet of an .xlsx stream, applying the limits in <paramref name="options"/>.
+    /// </summary>
+    /// <exception cref="InvalidDataException">As for <see cref="Read(Stream)"/>, and also when the
+    /// worksheet would hold more cells than <see cref="XlsxReadOptions.MaxCells"/>. That check runs
+    /// before the empty padding cells are allocated.</exception>
+    public static SheetData Read(Stream stream, XlsxReadOptions? options)
     {
+        long? maxCells = options?.MaxCells;
+        long totalCells = 0;
         // ZipArchive needs a seekable stream; buffer if necessary.
         Stream seekable = stream.CanSeek ? stream : Buffer(stream);
         using var archive = new ZipArchive(seekable, ZipArchiveMode.Read, leaveOpen: true);
@@ -135,6 +145,13 @@ public static class XlsxReader
             foreach (var cEl in Elements(rowEl, "c"))
             {
                 var colIndex = ColumnIndex((string?)cEl.Attribute("r"));
+                // Check the cap before padding: one far-right cell would otherwise allocate the
+                // whole row first.
+                var needed = Math.Max(colIndex + 1, cells.Count + 1) - cells.Count;
+                if (maxCells is { } cap && totalCells + needed > cap)
+                    throw new InvalidDataException(
+                        $"The worksheet holds more than {cap} cells (counting empty padding cells), the limit set by XlsxReadOptions.MaxCells.");
+                totalCells += needed;
                 // Pad any skipped columns with empties so alignment is preserved.
                 while (colIndex >= 0 && cells.Count < colIndex) cells.Add(CellValue.Empty);
                 cells.Add(ParseCell(cEl, sharedStrings, dateStyles, date1904));
@@ -186,7 +203,10 @@ public static class XlsxReader
                     if (styleAttr != null && int.TryParse(styleAttr, out var styleIdx) && dateStyles.Contains(styleIdx))
                     {
                         var oaDate = date1904 ? num + Date1904Offset : num;
-                        try { return CellValue.OfDate(DateTime.FromOADate(oaDate)); }
+                        // Excel treats 1900 as a leap year, so serials 1 to 59 show one day later than
+                        // the OLE epoch gives. Serial 60 (the fake 1900-02-29) is left as it was.
+                        var lateDays = !date1904 && oaDate >= 1 && oaDate < 60 ? 1 : 0;
+                        try { return CellValue.OfDate(DateTime.FromOADate(oaDate).AddDays(lateDays)); }
                         catch { /* out-of-range serial: fall through to number */ }
                     }
                     return CellValue.OfNumber(num);

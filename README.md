@@ -61,7 +61,7 @@ cell.AsString()   // best-effort display: invariant numbers, ISO-8601 dates
 | Format | Extension | Notes |
 |--------|-----------|-------|
 | Excel  | `.xlsx`   | Read: first worksheet. Write: every sheet. Shared strings, inline strings, booleans, numbers, and style-based date detection. |
-| CSV    | `.csv`, `.txt` | RFC-4180: quoted fields, escaped `""`, embedded commas and newlines. |
+| CSV    | `.csv`, `.txt` | RFC-4180: quoted fields, escaped `""`, embedded commas and newlines. A quote inside an unquoted field (`5" pipe`) is a literal character, as in Excel. |
 | TSV    | `.tsv`    | Tab-delimited. |
 
 You can also bypass detection: `Spreadsheet.Read(stream, SpreadsheetFormat.Xlsx)`.
@@ -132,6 +132,16 @@ CsvWriter.Write(responseStream, people, delimiter: ',');             // Talaan.C
   it is stored as a string and is not evaluated.
 - **Extreme numbers.** Values outside Excel's double range (denormals such as `double.Epsilon`) are
   written as given, and Excel may read them as 0.
+- **Wide sparse sheets.** Rows are dense: a row is padded with empty cells up to its last cell. One
+  cell at column `XFD` in each of 500 rows reads as 500 x 16384 cells (about 875 MB) from a file of a
+  few KB, and a byte limit does not catch that. To cap it, pass a limit and an oversized sheet throws
+  `InvalidDataException` before the padding is allocated. There is no limit by default.
+
+  ```csharp
+  var options = new XlsxReadOptions { MaxCells = 1_000_000 };
+  SheetData sheet = Spreadsheet.Read(uploadStream, SpreadsheetFormat.Xlsx, options);
+  // or XlsxReader.Read(stream, options)
+  ```
 - **Limits.** Text over 32767 characters in a cell throws. Nothing is written to a stream when any
   sheet or cell is rejected, and `WriteFile` writes a temp file then moves it into place.
 
@@ -139,7 +149,9 @@ CsvWriter.Write(responseStream, people, delimiter: ',');             // Talaan.C
 
 - **Dates.** `.xlsx` stores dates as serial numbers; Talaan inspects the workbook stylesheet
   (`cellXfs` to number format) to decide whether a numeric cell is a date, then converts via the OLE
-  Automation epoch. Ambiguous `m` (month vs. minute) is ignored in favour of unambiguous `y`/`d`.
+  Automation epoch. Excel treats 1900 as a leap year, so serials 1 to 59 are read as Excel shows
+  them (1 is 1900-01-01, 59 is 1900-02-28). Serial 60, the nonexistent 1900-02-29, reads as
+  1900-02-28 and 61 as 1900-03-01. The writer rejects dates before 1900-03-01. Ambiguous `m` (month vs. minute) is ignored in favour of unambiguous `y`/`d`.
 - **Column alignment.** Cell references (`A1`, `AB12`) are honoured, so skipped/blank cells become
   `CellValue.Empty` and columns stay aligned.
 - **Streaming input.** Non-seekable streams are buffered automatically for zip access.

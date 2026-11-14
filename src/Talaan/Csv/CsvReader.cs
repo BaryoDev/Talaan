@@ -11,7 +11,8 @@ namespace Talaan.Csv;
 /// record it started in, rather than silently swallowing the rest of the file: returning one row
 /// where the file had ten thousand is data loss, not leniency. Text found right after a closing
 /// quote (<c>"a"b</c>) is still appended to the same field instead of rejected; that loses no data,
-/// so it stays lenient for now.
+/// so it stays lenient for now. A quote in the middle of an unquoted field (<c>5" pipe</c>) is a
+/// literal character and does not open a quoted field, matching how Excel reads it.
 /// </summary>
 public static class CsvReader
 {
@@ -86,7 +87,9 @@ public static class CsvReader
                 continue;
             }
 
-            if (c == '"')
+            // A quote only opens quoted mode at the very start of a field. In the middle of an
+            // unquoted field (5" pipe) it is a literal character, as Excel reads it.
+            if (c == '"' && !fieldHasContent)
             {
                 inQuotes = true;
                 quoteStartRecord = rows.Count + 1;

@@ -53,6 +53,18 @@ public static class Spreadsheet
         _ => throw new NotSupportedException($"Unsupported spreadsheet format: {format}.")
     };
 
+    /// <summary>
+    /// Reads a spreadsheet in the given format, applying <paramref name="options"/> to .xlsx input.
+    /// CSV and TSV ignore the options.
+    /// </summary>
+    /// <exception cref="InvalidDataException">As for <see cref="Read(Stream, SpreadsheetFormat)"/>, and
+    /// for .xlsx when the sheet exceeds <see cref="XlsxReadOptions.MaxCells"/>.</exception>
+    public static SheetData Read(Stream stream, SpreadsheetFormat format, XlsxReadOptions options) => format switch
+    {
+        SpreadsheetFormat.Xlsx => XlsxReader.Read(stream, options),
+        _ => Read(stream, format)
+    };
+
     /// <summary>Reads a spreadsheet from disk, detecting the format from the file extension.</summary>
     /// <exception cref="InvalidDataException">The file is not a valid file of the detected format:
     /// not a valid zip for .xlsx, a part that is not well-formed XML or carries a DOCTYPE (the

@@ -11,6 +11,27 @@ public class CsvReaderTests
         => CsvReader.Read(new MemoryStream(Encoding.UTF8.GetBytes(csv)));
 
     [Fact]
+    public void Quote_in_the_middle_of_an_unquoted_field_is_literal_and_rows_stay_separate()
+    {
+        var sheet = Parse("5\" pipe,2\r\nunion,3\r\n3\" valve,4\r\n");
+        Assert.Equal(3, sheet.RowCount);
+        Assert.Equal("5\" pipe", sheet.At(0, 0).AsString());
+        Assert.Equal("2", sheet.At(0, 1).AsString());
+        Assert.Equal("union", sheet.At(1, 0).AsString());
+        Assert.Equal("3\" valve", sheet.At(2, 0).AsString());
+        Assert.Equal("4", sheet.At(2, 1).AsString());
+    }
+
+    [Fact]
+    public void Quoted_field_with_comma_and_newline_still_reads_as_one_field()
+    {
+        var sheet = Parse("x,\"a,b\nc\",y\n");
+        Assert.Equal(1, sheet.RowCount);
+        Assert.Equal("a,b\nc", sheet.At(0, 1).AsString());
+        Assert.Equal("y", sheet.At(0, 2).AsString());
+    }
+
+    [Fact]
     public void Reads_simple_rows()
     {
         var sheet = Parse("a,b,c\n1,2,3\n");
