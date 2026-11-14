@@ -61,7 +61,7 @@ cell.AsString()   // best-effort display: invariant numbers, ISO-8601 dates
 | Format | Extension | Notes |
 |--------|-----------|-------|
 | Excel  | `.xlsx`   | Read: first worksheet. Write: every sheet. Shared strings, inline strings, booleans, numbers, and style-based date detection. |
-| CSV    | `.csv`, `.txt` | RFC-4180: quoted fields, escaped `""`, embedded commas and newlines. |
+| CSV    | `.csv`, `.txt` | RFC-4180: quoted fields, escaped `""`, embedded commas and newlines. A quote inside an unquoted field opens quoted mode (see Design notes). |
 | TSV    | `.tsv`    | Tab-delimited. |
 
 You can also bypass detection: `Spreadsheet.Read(stream, SpreadsheetFormat.Xlsx)`.
@@ -132,6 +132,19 @@ CsvWriter.Write(responseStream, people, delimiter: ',');             // Talaan.C
   it is stored as a string and is not evaluated.
 - **Extreme numbers.** Values outside Excel's double range (denormals such as `double.Epsilon`) are
   written as given, and Excel may read them as 0.
+- **Wide sparse sheets.** Rows are dense: a row is padded with empty cells up to its last cell. One
+  cell at column `XFD` in each row reads as 16384 cells per row, about 0.9 MB retained per row
+  (500 rows is about 460 MB) from a file of a few KB, and a byte limit does not catch that. To cap
+  it, pass `MaxCells` and a sheet whose grid would hold more cells throws `InvalidDataException`
+  before that row's padding is allocated. There is no limit by default. `MaxCells` bounds the cells
+  in the returned grid only. It does not bound the padding for skipped rows (one `<row r="1048576">`
+  still adds about a million empty rows) or the memory used to parse the XML.
+
+  ```csharp
+  var options = new XlsxReadOptions { MaxCells = 1_000_000 };
+  SheetData sheet = Spreadsheet.Read(uploadStream, SpreadsheetFormat.Xlsx, encoding: null, options);
+  // or XlsxReader.Read(stream, options)
+  ```
 - **Limits.** Text over 32767 characters in a cell throws. Nothing is written to a stream when any
   sheet or cell is rejected, and `WriteFile` writes a temp file then moves it into place.
 
@@ -139,7 +152,16 @@ CsvWriter.Write(responseStream, people, delimiter: ',');             // Talaan.C
 
 - **Dates.** `.xlsx` stores dates as serial numbers; Talaan inspects the workbook stylesheet
   (`cellXfs` to number format) to decide whether a numeric cell is a date, then converts via the OLE
-  Automation epoch. Ambiguous `m` (month vs. minute) is ignored in favour of unambiguous `y`/`d`.
+  Automation epoch. In the 1900 date system, serials 1 to 59 read one day earlier than Excel shows
+  them (serial 1 reads 1899-12-31, 59 reads 1900-02-27), because Excel counts a nonexistent
+  1900-02-29. Serial 60 reads 1900-02-28 and 61 reads 1900-03-01. The writer refuses dates before
+  1900-03-01. This is current behaviour, kept so stored results do not change.
+  Ambiguous `m` (month vs. minute) is ignored in favour of unambiguous `y`/`d`.
+- **Quotes in CSV fields.** A quote inside an unquoted field opens quoted mode, unlike Excel, which
+  reads it as a literal. Depending on the text, it can merge rows (`5" pipe,2` followed by
+  `6" pipe,3` becomes one row), drop the quotes (`x"y,z"` reads as `xy,z`), or throw
+  `InvalidDataException` for an unterminated quote (`a"b`). Quote any field that contains a quote:
+  `"5"" pipe"`.
 - **Column alignment.** Cell references (`A1`, `AB12`) are honoured, so skipped/blank cells become
   `CellValue.Empty` and columns stay aligned.
 - **Streaming input.** Non-seekable streams are buffered automatically for zip access.

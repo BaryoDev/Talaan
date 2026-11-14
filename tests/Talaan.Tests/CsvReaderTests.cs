@@ -10,6 +10,23 @@ public class CsvReaderTests
     private static SheetData Parse(string csv)
         => CsvReader.Read(new MemoryStream(Encoding.UTF8.GetBytes(csv)));
 
+    // The next three pin current behaviour: a quote inside an unquoted field opens quoted mode.
+    // It differs from Excel and is documented in the README, not fixed here.
+    [Fact]
+    public void Quote_inside_an_unquoted_field_opens_quoted_mode_and_merges_rows()
+    {
+        var sheet = Parse("5\" pipe,2\n6\" pipe,3\n");
+        Assert.Equal(1, sheet.RowCount);
+    }
+
+    [Fact]
+    public void Quote_after_text_in_a_field_drops_the_quotes()
+        => Assert.Equal("xy,z", Parse("x\"y,z\"").At(0, 0).AsString());
+
+    [Fact]
+    public void Unterminated_mid_field_quote_throws()
+        => Assert.Throws<InvalidDataException>(() => Parse("a\"b"));
+
     [Fact]
     public void Reads_simple_rows()
     {
