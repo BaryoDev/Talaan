@@ -55,15 +55,16 @@ public static class Spreadsheet
 
     /// <summary>
     /// Reads a spreadsheet in the given format, applying <paramref name="options"/> to .xlsx input.
-    /// CSV and TSV ignore the options.
+    /// <paramref name="encoding"/> decodes CSV/TSV text (null means the UTF-8 default) and is ignored
+    /// for .xlsx; CSV and TSV ignore <paramref name="options"/>. The four parameters keep existing
+    /// three-argument calls binding to the overloads above.
     /// </summary>
     /// <exception cref="InvalidDataException">As for <see cref="Read(Stream, SpreadsheetFormat)"/>, and
     /// for .xlsx when the sheet exceeds <see cref="XlsxReadOptions.MaxCells"/>.</exception>
-    public static SheetData Read(Stream stream, SpreadsheetFormat format, XlsxReadOptions options) => format switch
-    {
-        SpreadsheetFormat.Xlsx => XlsxReader.Read(stream, options),
-        _ => Read(stream, format)
-    };
+    public static SheetData Read(Stream stream, SpreadsheetFormat format, Encoding? encoding, XlsxReadOptions options)
+        => format == SpreadsheetFormat.Xlsx
+            ? XlsxReader.Read(stream, options)
+            : encoding is null ? Read(stream, format) : Read(stream, format, encoding);
 
     /// <summary>Reads a spreadsheet from disk, detecting the format from the file extension.</summary>
     /// <exception cref="InvalidDataException">The file is not a valid file of the detected format:

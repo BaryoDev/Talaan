@@ -7,13 +7,15 @@ namespace Talaan.Xlsx;
 public sealed class XlsxReadOptions
 {
     /// <summary>
-    /// The most cells a worksheet may produce, counting the empty cells Talaan pads in so every row
-    /// lines up with its widest cell. <c>null</c> (the default) means no limit.
+    /// The most cells the returned grid may hold, counting the empty cells Talaan pads in so every
+    /// row lines up with its last cell. <c>null</c> (the default) means no limit; zero or a negative
+    /// value rejects the first cell. Exceeding it throws <see cref="InvalidDataException"/>.
     /// <para>
-    /// A sheet that holds one cell at column XFD in each row is a few KB on disk but reads as 16384
-    /// cells per row, about 1.75 MB of memory per row. A byte limit does not catch that, a cell
-    /// limit does. The check runs before the padding is allocated, and exceeding it throws
-    /// <see cref="InvalidDataException"/>.
+    /// A sheet with one cell at column XFD in each row is a few KB on disk but reads as 16384 cells
+    /// per row (about 0.9 MB retained per row, since each cell is 56 bytes). The check runs before a
+    /// row's padding is allocated. It bounds the output grid only: it does not bound padding for
+    /// skipped rows (a single <c>&lt;row r="1048576"&gt;</c> still adds about a million empty rows) or
+    /// the memory used to parse the XML parts.
     /// </para>
     /// </summary>
     public long? MaxCells { get; init; }

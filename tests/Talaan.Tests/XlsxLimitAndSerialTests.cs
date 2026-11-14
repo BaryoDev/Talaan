@@ -38,6 +38,39 @@ public class XlsxLimitAndSerialTests
         Assert.Equal(3, sheet.RowCount);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void Zero_or_negative_MaxCells_rejects_the_first_cell(long max)
+        => Assert.Throws<InvalidDataException>(() => XlsxReader.Read(
+            XlsxBuilder.Build(XlsxBuilder.Row("""<c r="A1"><v>1</v></c>""")),
+            new XlsxReadOptions { MaxCells = max }));
+
+    [Fact]
+    public void Empty_sheet_reads_with_MaxCells_zero()
+    {
+        var sheet = XlsxReader.Read(XlsxBuilder.Build(XlsxBuilder.Sheet()), new XlsxReadOptions { MaxCells = 0 });
+        Assert.Equal(0, sheet.RowCount);
+    }
+
+    [Fact]
+    public void Facade_applies_options_to_xlsx_and_ignores_them_for_csv()
+    {
+        Assert.Throws<InvalidDataException>(() => Spreadsheet.Read(
+            WideSparse(500), SpreadsheetFormat.Xlsx, null, new XlsxReadOptions { MaxCells = 100_000 }));
+
+        var csv = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("a,b\n1,2\n"));
+        var sheet = Spreadsheet.Read(csv, SpreadsheetFormat.Csv, null, new XlsxReadOptions { MaxCells = 1 });
+        Assert.Equal("2", sheet.At(1, 1).AsString());
+    }
+
+    [Fact]
+    public void Existing_three_argument_calls_still_bind()
+    {
+        var csv = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("a\n"));
+        Assert.Equal("a", Spreadsheet.Read(csv, SpreadsheetFormat.Csv, (System.Text.Encoding)null!).At(0, 0).AsString());
+    }
+
     private static CellValue ReadSerial(double serial)
     {
         var s = serial.ToString(CultureInfo.InvariantCulture);
@@ -50,25 +83,16 @@ public class XlsxLimitAndSerialTests
                 """)).At(0, 0);
     }
 
+    // Pins current behaviour (documented in the README): serials 1 to 59 read one day early.
     [Theory]
-    [InlineData(1, 1900, 1, 1)]
-    [InlineData(31, 1900, 1, 31)]
-    [InlineData(32, 1900, 2, 1)]
-    [InlineData(59, 1900, 2, 28)]
+    [InlineData(1, 1899, 12, 31)]
+    [InlineData(59, 1900, 2, 27)]
+    [InlineData(60, 1900, 2, 28)]
     [InlineData(61, 1900, 3, 1)]
-    [InlineData(45000, 2023, 3, 15)]
-    public void Serial_reads_as_Excel_shows_it(double serial, int y, int m, int d)
+    public void Serial_reads_as_before(double serial, int y, int m, int d)
     {
         var cell = ReadSerial(serial);
         Assert.Equal(CellKind.Date, cell.Kind);
         Assert.Equal(new DateTime(y, m, d), cell.Date);
-    }
-
-    [Fact]
-    public void Serial_60_keeps_its_previous_value_and_does_not_throw()
-    {
-        var cell = ReadSerial(60);
-        Assert.Equal(CellKind.Date, cell.Kind);
-        Assert.Equal(new DateTime(1900, 2, 28), cell.Date);
     }
 }

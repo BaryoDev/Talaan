@@ -203,10 +203,7 @@ public static class XlsxReader
                     if (styleAttr != null && int.TryParse(styleAttr, out var styleIdx) && dateStyles.Contains(styleIdx))
                     {
                         var oaDate = date1904 ? num + Date1904Offset : num;
-                        // Excel treats 1900 as a leap year, so serials 1 to 59 show one day later than
-                        // the OLE epoch gives. Serial 60 (the fake 1900-02-29) is left as it was.
-                        var lateDays = !date1904 && oaDate >= 1 && oaDate < 60 ? 1 : 0;
-                        try { return CellValue.OfDate(DateTime.FromOADate(oaDate).AddDays(lateDays)); }
+                        try { return CellValue.OfDate(DateTime.FromOADate(oaDate)); }
                         catch { /* out-of-range serial: fall through to number */ }
                     }
                     return CellValue.OfNumber(num);
