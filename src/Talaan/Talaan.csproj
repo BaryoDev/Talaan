@@ -19,7 +19,7 @@
 
     <PackageReleaseNotes>0.4.0
 - New: XlsxReadOptions.MaxCells is an opt-in cap on cells per worksheet. A sheet that would hold more throws InvalidDataException. There is no limit by default.
-- CSV: a quote in the middle of an unquoted field is read as a literal character.
+- CSV: a quote in the middle of an unquoted field opens quoted mode, so it can merge rows or throw. Unchanged, now documented. Quote any field that contains a quote.
 - Dates: in the 1900 date system, serials 1 to 59 read one day earlier than Excel shows. Unchanged, now documented.
 - Correction: the 0.3.0 note below listed CsvWriter.Write(Stream, IEnumerable&lt;SheetData&gt;). That overload does not exist. CsvWriter only has Write(Stream, SheetData, char delimiter).
 - Reading an .xlsx part nested deeper than 256 levels, a non-numeric numFmtId, or a relationship target that climbs above the package root throws InvalidDataException.
