@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <PackageId>Talaan</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>BaryoDev</Authors>
     <Description>A zero-dependency spreadsheet and CSV reader and writer for .NET. Reads and writes .xlsx (OOXML) and CSV into a simple typed cell grid, no Interop, no ClosedXML, no OpenXML SDK.</Description>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
@@ -17,7 +17,10 @@
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
 
-    <PackageReleaseNotes>Next release (notes added after 0.3.0 shipped)
+    <PackageReleaseNotes>0.4.0
+- New: XlsxReadOptions.MaxCells is an opt-in cap on cells per worksheet. A sheet that would hold more throws InvalidDataException. There is no limit by default.
+- CSV: a quote in the middle of an unquoted field opens quoted mode, so it can merge rows or throw. Unchanged, now documented. Quote any field that contains a quote.
+- Dates: in the 1900 date system, serials 1 to 59 read one day earlier than Excel shows. Unchanged, now documented.
 - Correction: the 0.3.0 note below listed CsvWriter.Write(Stream, IEnumerable&lt;SheetData&gt;). That overload does not exist. CsvWriter only has Write(Stream, SheetData, char delimiter).
 - Reading an .xlsx part nested deeper than 256 levels, a non-numeric numFmtId, or a relationship target that climbs above the package root throws InvalidDataException.
 - Relationship targets such as ../xl/worksheets/sheet1.xml now resolve.
