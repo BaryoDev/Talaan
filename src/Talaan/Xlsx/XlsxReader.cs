@@ -37,12 +37,6 @@ public static class XlsxReader
     /// <see cref="XmlException"/> as InnerException, so a bad .xlsx surfaces as one exception type.
     /// This is the only place that wraps it; nothing else is caught or wrapped.
     /// </summary>
-    private static XDocument LoadPart(ZipArchiveEntry entry, string partName, ByteBudget budget)
-    {
-        using var stream = budget.Open(entry, partName);
-        return LoadPart(stream, partName);
-    }
-
     private static XDocument LoadPart(Stream stream, string partName)
     {
         try
@@ -54,6 +48,12 @@ public static class XlsxReader
         {
             throw new InvalidDataException($"{partName} is not valid XML: {ex.Message}", ex);
         }
+    }
+
+    private static XDocument LoadPart(ZipArchiveEntry entry, string partName, ByteBudget budget)
+    {
+        using var stream = budget.Open(entry, partName);
+        return LoadPart(stream, partName);
     }
 
     // Shared by every part read in one Read call. The Length check is only a fast path: the zip

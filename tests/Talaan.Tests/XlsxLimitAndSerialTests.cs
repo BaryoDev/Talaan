@@ -226,4 +226,73 @@ public class XlsxLimitAndSerialTests
             XlsxBuilder.Build(InlineSheet(BigText(2 * 1024 * 1024))), options));
         Assert.Contains("MaxUncompressedBytes", bytes.Message);
     }
+
+    [Fact]
+    public void Zero_MaxUncompressedBytes_rejects_an_empty_first_part()
+    {
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(
+            XlsxBuilder.Build(SharedSheet, sharedStringsXml: ""),
+            new XlsxReadOptions { MaxUncompressedBytes = 0 }));
+        Assert.Contains("MaxUncompressedBytes", ex.Message);
+        Assert.Contains("xl/sharedStrings.xml", ex.Message);
+    }
+
+    [Fact]
+    public void Declared_size_over_the_budget_is_rejected_before_reading()
+    {
+        var bytes = XlsxBuilder.Build(InlineSheet("hello")).ToArray();
+        PatchUncompressedSize(bytes, "xl/worksheets/sheet1.xml", 2 * 1024 * 1024);
+
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(
+            new MemoryStream(bytes), new XlsxReadOptions { MaxUncompressedBytes = OneMb }));
+        Assert.Contains("MaxUncompressedBytes", ex.Message);
+        Assert.Contains("xl/worksheets/sheet1.xml", ex.Message);
+    }
+
+    private static string Padded(string xml, int commentChars)
+    {
+        var end = xml.LastIndexOf("</", StringComparison.Ordinal);
+        return xml[..end] + "<!--" + BigText(commentChars) + "-->" + xml[end..];
+    }
+
+    [Fact]
+    public void Styles_over_MaxUncompressedBytes_is_rejected()
+    {
+        var styles = Padded(
+            """<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"></styleSheet>""",
+            2 * 1024 * 1024);
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(
+            XlsxBuilder.Build(XlsxBuilder.Row("""<c r="A1"><v>1</v></c>"""), stylesXml: styles),
+            new XlsxReadOptions { MaxUncompressedBytes = OneMb }));
+        Assert.Contains("MaxUncompressedBytes", ex.Message);
+        Assert.Contains("xl/styles.xml", ex.Message);
+    }
+
+    [Fact]
+    public void Workbook_rels_over_MaxUncompressedBytes_is_rejected()
+    {
+        var rels = Padded(XlsxBuilder.DefaultWorkbookRelsXml, 2 * 1024 * 1024);
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(
+            XlsxBuilder.Build(InlineSheet("hello"), workbookRelsXml: rels),
+            new XlsxReadOptions { MaxUncompressedBytes = OneMb }));
+        Assert.Contains("MaxUncompressedBytes", ex.Message);
+        Assert.Contains("xl/_rels/workbook.xml.rels", ex.Message);
+    }
+
+    [Fact]
+    public void Workbook_xml_counts_twice()
+    {
+        var workbook = Padded(XlsxBuilder.DefaultWorkbookXml, 600 * 1024);
+
+        var ex = Assert.Throws<InvalidDataException>(() => XlsxReader.Read(
+            XlsxBuilder.Build(InlineSheet("hello"), workbookXml: workbook),
+            new XlsxReadOptions { MaxUncompressedBytes = OneMb }));
+        Assert.Contains("MaxUncompressedBytes", ex.Message);
+        Assert.Contains("xl/workbook.xml", ex.Message);
+
+        var sheet = XlsxReader.Read(
+            XlsxBuilder.Build(InlineSheet("hello"), workbookXml: workbook),
+            new XlsxReadOptions { MaxUncompressedBytes = 2 * OneMb });
+        Assert.Equal("hello", sheet.At(0, 0).Text);
+    }
 }
