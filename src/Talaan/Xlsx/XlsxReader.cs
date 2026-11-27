@@ -68,7 +68,9 @@ public static class XlsxReader
         public Stream Open(ZipArchiveEntry entry, string partName)
         {
             if (_limit is not { } limit) return entry.Open();
-            if (limit <= 0 || entry.Length > limit - _used)
+            if (limit <= 0)
+                throw Over(partName);
+            if (entry.Length > limit - _used)
                 throw Over(partName);
             return new CountingStream(entry.Open(), this, partName);
         }
