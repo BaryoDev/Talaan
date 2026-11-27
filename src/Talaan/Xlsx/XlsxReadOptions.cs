@@ -19,4 +19,17 @@ public sealed class XlsxReadOptions
     /// </para>
     /// </summary>
     public long? MaxCells { get; init; }
+
+    /// <summary>
+    /// The most bytes Talaan may decompress across all the parts it reads in one call (the sheet,
+    /// shared strings, styles, workbook.xml and its rels). workbook.xml is read once for the date
+    /// system and again to find the first sheet when the rels part exists, and each read counts.
+    /// <c>null</c> (the default) means no limit; zero or a negative value rejects the first part.
+    /// Exceeding it throws <see cref="InvalidDataException"/> naming the part.
+    /// <para>
+    /// It does not bound the zip's central directory, the copy Talaan makes of a non-seekable
+    /// input, or the parsed XML tree beyond those bytes.
+    /// </para>
+    /// </summary>
+    public long? MaxUncompressedBytes { get; init; }
 }

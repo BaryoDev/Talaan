@@ -50,6 +50,89 @@ public static class XlsxReader
         }
     }
 
+    private static XDocument LoadPart(ZipArchiveEntry entry, string partName, ByteBudget budget)
+    {
+        using var stream = budget.Open(entry, partName);
+        return LoadPart(stream, partName);
+    }
+
+    // Shared by every part read in one Read call. The Length check is only a fast path: the zip
+    // header can understate the real size, so the counting stream is what enforces the limit.
+    private sealed class ByteBudget
+    {
+        private readonly long? _limit;
+        private long _used;
+
+        public ByteBudget(long? limit) => _limit = limit;
+
+        public Stream Open(ZipArchiveEntry entry, string partName)
+        {
+            if (_limit is not { } limit) return entry.Open();
+            if (limit <= 0)
+                throw Over(partName);
+            if (entry.Length > limit - _used)
+                throw Over(partName);
+            return new CountingStream(entry.Open(), this, partName);
+        }
+
+        private InvalidDataException Over(string partName) =>
+            new($"{partName} is over the limit set by XlsxReadOptions.MaxUncompressedBytes.");
+
+        private void Add(int count, string partName)
+        {
+            _used += count;
+            if (_used > _limit) throw Over(partName);
+        }
+
+        private sealed class CountingStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly ByteBudget _budget;
+            private readonly string _partName;
+
+            public CountingStream(Stream inner, ByteBudget budget, string partName)
+            {
+                _inner = inner;
+                _budget = budget;
+                _partName = partName;
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                var n = _inner.Read(buffer, offset, count);
+                _budget.Add(n, _partName);
+                return n;
+            }
+
+            public override int Read(Span<byte> buffer)
+            {
+                var n = _inner.Read(buffer);
+                _budget.Add(n, _partName);
+                return n;
+            }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) _inner.Dispose();
+                base.Dispose(disposing);
+            }
+        }
+    }
+
     // Real worksheets nest a handful of levels. XmlReader has no depth limit and loading a very
     // deep part is super-linear, so a tiny hostile part could pin a CPU. Deeper than this is not
     // a workbook Excel wrote.
@@ -113,26 +196,27 @@ public static class XlsxReader
     /// Reads the first worksheet of an .xlsx stream, applying the limits in <paramref name="options"/>.
     /// </summary>
     /// <exception cref="InvalidDataException">As for <see cref="Read(Stream)"/>, and also when the
-    /// worksheet would hold more cells than <see cref="XlsxReadOptions.MaxCells"/>. That check runs
-    /// before the empty padding cells are allocated.</exception>
+    /// worksheet would hold more cells than <see cref="XlsxReadOptions.MaxCells"/> (checked before the
+    /// empty padding cells are allocated), or when the parts it reads decompress to more than
+    /// <see cref="XlsxReadOptions.MaxUncompressedBytes"/>.</exception>
     public static SheetData Read(Stream stream, XlsxReadOptions? options)
     {
         long? maxCells = options?.MaxCells;
         long totalCells = 0;
+        var budget = new ByteBudget(options?.MaxUncompressedBytes);
         // ZipArchive needs a seekable stream; buffer if necessary.
         Stream seekable = stream.CanSeek ? stream : Buffer(stream);
         using var archive = new ZipArchive(seekable, ZipArchiveMode.Read, leaveOpen: true);
 
-        var sharedStrings = ReadSharedStrings(archive);
-        var dateStyles = ReadDateStyles(archive);
-        var date1904 = ReadDate1904(archive);
-        var sheetPath = ResolveFirstSheetPath(archive);
+        var sharedStrings = ReadSharedStrings(archive, budget);
+        var dateStyles = ReadDateStyles(archive, budget);
+        var date1904 = ReadDate1904(archive, budget);
+        var sheetPath = ResolveFirstSheetPath(archive, budget);
 
         var entry = GetEntry(archive, sheetPath)
             ?? throw new InvalidDataException($"Worksheet part '{sheetPath}' not found in workbook.");
 
-        using var sheetStream = entry.Open();
-        var doc = LoadPart(sheetStream, sheetPath);
+        var doc = LoadPart(entry, sheetPath, budget);
 
         var rows = new List<IReadOnlyList<CellValue>>();
         foreach (var rowEl in Descendants(doc.Root, "row"))
@@ -212,14 +296,13 @@ public static class XlsxReader
         }
     }
 
-    private static List<string> ReadSharedStrings(ZipArchive archive)
+    private static List<string> ReadSharedStrings(ZipArchive archive, ByteBudget budget)
     {
         var result = new List<string>();
         var entry = GetEntry(archive, "xl/sharedStrings.xml");
         if (entry is null) return result;
 
-        using var s = entry.Open();
-        var doc = LoadPart(s, "xl/sharedStrings.xml");
+        var doc = LoadPart(entry, "xl/sharedStrings.xml", budget);
         foreach (var si in Descendants(doc.Root, "si"))
             result.Add(ExtractText(si));
         return result;
@@ -247,14 +330,13 @@ public static class XlsxReader
     /// <summary>
     /// Returns the set of cell-style indices (positions in cellXfs) that use a date number format.
     /// </summary>
-    private static HashSet<int> ReadDateStyles(ZipArchive archive)
+    private static HashSet<int> ReadDateStyles(ZipArchive archive, ByteBudget budget)
     {
         var dateStyleIndices = new HashSet<int>();
         var entry = GetEntry(archive, "xl/styles.xml");
         if (entry is null) return dateStyleIndices;
 
-        using var s = entry.Open();
-        var doc = LoadPart(s, "xl/styles.xml");
+        var doc = LoadPart(entry, "xl/styles.xml", budget);
 
         // Custom formats (id >= 164) whose format code looks like a date.
         var dateFormatIds = new HashSet<int>(BuiltinDateFormats);
@@ -291,13 +373,12 @@ public static class XlsxReader
     /// True if the workbook uses the 1904 date system (`&lt;workbookPr date1904="1"/&gt;` in
     /// xl/workbook.xml). date1904 is xsd:boolean, so "1" and "true" both count.
     /// </summary>
-    private static bool ReadDate1904(ZipArchive archive)
+    private static bool ReadDate1904(ZipArchive archive, ByteBudget budget)
     {
         var entry = GetEntry(archive, "xl/workbook.xml");
         if (entry is null) return false;
 
-        using var s = entry.Open();
-        var doc = LoadPart(s, "xl/workbook.xml");
+        var doc = LoadPart(entry, "xl/workbook.xml", budget);
         var attr = (string?)Descendants(doc.Root, "workbookPr").FirstOrDefault()?.Attribute("date1904");
         return attr == "1" || string.Equals(attr, "true", StringComparison.OrdinalIgnoreCase);
     }
@@ -332,7 +413,7 @@ public static class XlsxReader
         return false;
     }
 
-    private static string ResolveFirstSheetPath(ZipArchive archive)
+    private static string ResolveFirstSheetPath(ZipArchive archive, ByteBudget budget)
     {
         // Map the first <sheet> in workbook.xml to its part via the workbook relationships.
         var wb = GetEntry(archive, "xl/workbook.xml");
@@ -341,16 +422,14 @@ public static class XlsxReader
         {
             try
             {
-                using var wbStream = wb.Open();
-                var wbDoc = LoadPart(wbStream, "xl/workbook.xml");
+                var wbDoc = LoadPart(wb, "xl/workbook.xml", budget);
                 var firstSheet = Descendants(wbDoc.Root, "sheet").FirstOrDefault();
                 var rid = firstSheet?.Attributes()
                     .FirstOrDefault(a => a.Name.LocalName == "id")?.Value; // r:id
 
                 if (rid != null)
                 {
-                    using var relStream = rels.Open();
-                    var relDoc = LoadPart(relStream, "xl/_rels/workbook.xml.rels");
+                    var relDoc = LoadPart(rels, "xl/_rels/workbook.xml.rels", budget);
                     var target = Descendants(relDoc.Root, "Relationship")
                         .FirstOrDefault(r => (string?)r.Attribute("Id") == rid
                             && !string.Equals((string?)r.Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))?
