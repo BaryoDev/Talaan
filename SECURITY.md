@@ -19,8 +19,9 @@ of arbitrary types anywhere in the library.
 ## What that means in practice
 
 **Resource exhaustion is the realistic attack.** An `.xlsx` is a zip, and both the zip and the XML
-inside it amplify. A malformed or hostile file cannot currently be rejected by size, because there
-is no limit anywhere in the read path:
+inside it amplify. Two opt-in limits exist, `XlsxReadOptions.MaxCells` and
+`XlsxReadOptions.MaxUncompressedBytes`, and both are off by default. The byte limit does not cover
+the first bullet below. Without them, a hostile file is not rejected by size:
 
 - `XlsxReader.Read` buffers a non-seekable stream into a `MemoryStream` with no cap.
 - Each part is handed to `XDocument.Load`, which builds the whole tree in memory.

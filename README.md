@@ -140,8 +140,15 @@ CsvWriter.Write(responseStream, people, delimiter: ',');             // Talaan.C
   in the returned grid only. It does not bound the padding for skipped rows (one `<row r="1048576">`
   still adds about a million empty rows) or the memory used to parse the XML.
 
+  To cap the bytes Talaan decompresses, pass `MaxUncompressedBytes`. One budget covers every part
+  read in the call (the sheet, shared strings, styles, workbook.xml and its rels), and a file that
+  goes over throws `InvalidDataException` naming the part. It is off by default. Only the four
+  argument `Spreadsheet.Read` and `XlsxReader.Read(stream, options)` take options, so for
+  `ReadFile` or the shorter `Read` overloads open the stream yourself. It does not cover a
+  non-seekable stream copied into memory, so cap the upload size too.
+
   ```csharp
-  var options = new XlsxReadOptions { MaxCells = 1_000_000 };
+  var options = new XlsxReadOptions { MaxCells = 1_000_000, MaxUncompressedBytes = 50_000_000 };
   SheetData sheet = Spreadsheet.Read(uploadStream, SpreadsheetFormat.Xlsx, encoding: null, options);
   // or XlsxReader.Read(stream, options)
   ```

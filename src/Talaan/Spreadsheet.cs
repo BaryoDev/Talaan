@@ -60,7 +60,8 @@ public static class Spreadsheet
     /// three-argument calls binding to the overloads above.
     /// </summary>
     /// <exception cref="InvalidDataException">As for <see cref="Read(Stream, SpreadsheetFormat)"/>, and
-    /// for .xlsx when the sheet exceeds <see cref="XlsxReadOptions.MaxCells"/>.</exception>
+    /// for .xlsx when the sheet exceeds <see cref="XlsxReadOptions.MaxCells"/> or the parts exceed
+    /// <see cref="XlsxReadOptions.MaxUncompressedBytes"/>.</exception>
     public static SheetData Read(Stream stream, SpreadsheetFormat format, Encoding? encoding, XlsxReadOptions options)
         => format == SpreadsheetFormat.Xlsx
             ? XlsxReader.Read(stream, options)

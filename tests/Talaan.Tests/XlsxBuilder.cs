@@ -33,6 +33,8 @@ internal static class XlsxBuilder
     /// together to control how the first sheet resolves through the rels file.
     /// <paramref name="extraParts"/> adds further raw parts verbatim (path to content), for a decoy
     /// worksheet, a second sheet, or anything else a test needs beyond the parts above.
+    /// <paramref name="compression"/> applies to every part; <see cref="CompressionLevel.NoCompression"/>
+    /// stores them.
     /// </summary>
     public static MemoryStream Build(
         string sheetXml,
@@ -41,14 +43,15 @@ internal static class XlsxBuilder
         string? workbookXml = null,
         string? workbookRelsXml = null,
         string sheetPath = "xl/worksheets/sheet1.xml",
-        IReadOnlyDictionary<string, string>? extraParts = null)
+        IReadOnlyDictionary<string, string>? extraParts = null,
+        CompressionLevel compression = CompressionLevel.Optimal)
     {
         var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
             void Add(string path, string content)
             {
-                using var w = new StreamWriter(zip.CreateEntry(path).Open(), new UTF8Encoding(false));
+                using var w = new StreamWriter(zip.CreateEntry(path, compression).Open(), new UTF8Encoding(false));
                 w.Write(content);
             }
 
