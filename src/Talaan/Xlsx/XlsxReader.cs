@@ -196,8 +196,8 @@ public static class XlsxReader
     /// Reads the first worksheet of an .xlsx stream, applying the limits in <paramref name="options"/>.
     /// </summary>
     /// <exception cref="InvalidDataException">As for <see cref="Read(Stream)"/>, and also when the
-    /// worksheet would hold more cells than <see cref="XlsxReadOptions.MaxCells"/>. That check runs
-    /// before the empty padding cells are allocated, or when the parts it reads decompress to more than
+    /// worksheet would hold more cells than <see cref="XlsxReadOptions.MaxCells"/> (checked before the
+    /// empty padding cells are allocated), or when the parts it reads decompress to more than
     /// <see cref="XlsxReadOptions.MaxUncompressedBytes"/>.</exception>
     public static SheetData Read(Stream stream, XlsxReadOptions? options)
     {
