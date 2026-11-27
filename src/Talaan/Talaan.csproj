@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <PackageId>Talaan</PackageId>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>BaryoDev</Authors>
     <Description>A zero-dependency spreadsheet and CSV reader and writer for .NET. Reads and writes .xlsx (OOXML) and CSV into a simple typed cell grid, no Interop, no ClosedXML, no OpenXML SDK.</Description>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
@@ -17,7 +17,11 @@
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
 
-    <PackageReleaseNotes>0.4.0
+    <PackageReleaseNotes>0.5.0
+- New: XlsxReadOptions.MaxUncompressedBytes is an opt-in cap on the bytes Talaan decompresses in one read, across the sheet, shared strings, styles, workbook.xml and its rels. A file that goes over throws InvalidDataException naming the part. There is no limit by default.
+- It does not cover the zip's central directory, the in-memory copy of a non-seekable stream, or the parsed XML tree, so cap the upload size too.
+
+0.4.0
 - New: XlsxReadOptions.MaxCells is an opt-in cap on cells per worksheet. A sheet that would hold more throws InvalidDataException. There is no limit by default.
 - CSV: a quote in the middle of an unquoted field opens quoted mode, so it can merge rows or throw. Unchanged, now documented. Quote any field that contains a quote.
 - Dates: in the 1900 date system, serials 1 to 59 read one day earlier than Excel shows. Unchanged, now documented.
